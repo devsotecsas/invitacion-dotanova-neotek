@@ -47,9 +47,11 @@
     <!-- Fondo continuo detrás de invitación y formulario: al bajar, la foto nítida
          se desplaza hacia arriba y se funde en la versión con textura (ver app.js). -->
     <div class="fondo" aria-hidden="true">
-      <div class="fondo-foto">
-        <div class="fondo-nitida"></div>
-        <div class="fondo-textura"></div>
+      <div class="fondo-zoom">
+        <div class="fondo-foto">
+          <div class="fondo-nitida"></div>
+          <div class="fondo-textura"></div>
+        </div>
       </div>
       <div class="fondo-velo fondo-velo-invitacion"></div>
       <div class="fondo-velo fondo-velo-confirmar"></div>
@@ -126,7 +128,7 @@
             </div>
             <div class="campo campo-ancho">
               <label for="alergia">Alergias</label>
-              <input id="alergia" name="alergia" type="text" autocomplete="off" placeholder="Ej: Maní, mariscos. Si no tienes, déjalo vacío" maxlength="200" aria-describedby="ayuda-alergia">
+              <input id="alergia" name="alergia" type="text" autocomplete="off" placeholder="Ej: Maní, mariscos" maxlength="200" aria-describedby="ayuda-alergia">
               <p class="campo-ayuda" id="ayuda-alergia">Opcional. Solo lo usaremos para la alimentación y atención del evento.</p>
             </div>
             <!-- trampa para bots: las personas no la ven -->

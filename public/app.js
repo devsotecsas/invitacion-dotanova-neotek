@@ -17,55 +17,16 @@
   const ESPERA_AUTOMATICA = ENTRADA + LECTURA; // 6,7 s hasta que empieza la salida
   const MINIMO_ANTES_DE_SALTAR = ENTRADA; // evita saltarla por un toque accidental al abrir
 
-  // Salida: el texto se desvanece, luego zoom lento del engranaje y, en el último 40 %,
-  // fundido hacia la invitación. Con movimiento reducido: solo fundidos.
+  // Salida (2,8 s): el texto se desvanece (0,6 s); el engranaje se acerca de 1 a 1,3 en
+  // toda la salida, a velocidad constante; desde 0,8 s la portada entera se disuelve
+  // hacia la invitación. Con movimiento reducido: solo fundidos.
   const SALIDA = reducido ? 1600 : 2800;
   const SALIDA_TEXTO = 600;
-  const SALIDA_ZOOM_DESDE = 300;
-  const SALIDA_FUNDIDO_DESDE = reducido ? SALIDA_TEXTO : SALIDA * 0.6;
-  const curvaZoom = cubicBezier(0.45, 0, 0.25, 1);
+  const SALIDA_FUNDIDO_DESDE = reducido ? SALIDA_TEXTO : 800;
+  const ZOOM_ENGRANAJE = 1.3;
 
   const inicio = performance.now();
   let saliendo = false;
-
-  function cubicBezier(x1, y1, x2, y2) {
-    const curva = (a, b, t) => 3 * a * t * (1 - t) ** 2 + 3 * b * t * t * (1 - t) + t ** 3;
-    return (x) => {
-      let lo = 0, hi = 1;
-      for (let i = 0; i < 30; i++) {
-        const t = (lo + hi) / 2;
-        if (curva(x1, x2, t) < x) lo = t; else hi = t;
-      }
-      return curva(y1, y2, (lo + hi) / 2);
-    };
-  }
-
-  function escalaQueCubre() {
-    // El engranaje debe crecer hasta que su parte más angosta (fondo de los dientes,
-    // 41% del ancho) llegue a la esquina de la pantalla más lejana a su centro.
-    const r = engranaje.getBoundingClientRect();
-    const cx = r.left + r.width / 2;
-    const cy = r.top + r.height / 2;
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    const lejos = Math.max(Math.hypot(cx, cy), Math.hypot(w - cx, cy), Math.hypot(cx, h - cy), Math.hypot(w - cx, h - cy));
-    return (lejos / ((r.width || 300) * 0.41)) * 1.06;
-  }
-
-  function animarZoomEngranaje() {
-    const cubre = escalaQueCubre();
-    // Cuando empieza el fundido el engranaje ya debe cubrir la pantalla (nunca se ven sus bordes).
-    const duracion = SALIDA - SALIDA_ZOOM_DESDE;
-    const avanceAlFundido = curvaZoom((SALIDA_FUNDIDO_DESDE - SALIDA_ZOOM_DESDE) / duracion);
-    const final = Math.max(cubre * 1.6, cubre ** (1 / avanceAlFundido) * 1.02);
-    // Interpolación en escala logarítmica: el acercamiento se percibe parejo, sin acelerones.
-    const pasos = 48;
-    const fotogramas = [];
-    for (let i = 0; i <= pasos; i++) {
-      fotogramas.push({ transform: `scale(${(final ** curvaZoom(i / pasos)).toFixed(4)})` });
-    }
-    engranaje.animate(fotogramas, { delay: SALIDA_ZOOM_DESDE, duration: duracion, easing: 'linear', fill: 'forwards' });
-  }
 
   function mostrarInvitacion() {
     body.classList.remove('bloqueado');
@@ -81,7 +42,13 @@
     portada.querySelectorAll('.portada-titulo, .portada-pie').forEach((el) => {
       el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: SALIDA_TEXTO, easing: 'ease-in-out', fill: 'forwards' });
     });
-    if (!reducido) animarZoomEngranaje();
+    if (!reducido) {
+      engranaje.animate([{ transform: 'scale(1)' }, { transform: `scale(${ZOOM_ENGRANAJE})` }], {
+        duration: SALIDA,
+        easing: 'linear',
+        fill: 'forwards',
+      });
+    }
 
     const fundido = portada.animate([{ opacity: 1 }, { opacity: 0 }], {
       delay: SALIDA_FUNDIDO_DESDE,
@@ -89,7 +56,7 @@
       easing: 'ease-in-out',
       fill: 'forwards',
     });
-    // El contenido de la invitación empieza a entrar cuando arranca el fundido.
+    // Con el fundido entran el contenido de la invitación y el acercamiento de su foto (styles.css).
     window.setTimeout(() => body.classList.add('listo'), SALIDA_FUNDIDO_DESDE);
     fundido.finished.then(mostrarInvitacion, mostrarInvitacion);
   }
@@ -103,7 +70,10 @@
   if (location.hash === '#confirmar') {
     portada.remove();
     body.classList.remove('bloqueado');
+    document.querySelector('.fondo').classList.add('directo');
     body.classList.add('listo');
+    // Lo que usa variables declaradas más abajo (fondo, textura) va dentro del rAF:
+    // llamarlo aquí lanza un ReferenceError y deja el formulario sin su manejador de envío.
     requestAnimationFrame(() => {
       pedirTextura();
       // salto directo (sin el scroll suave del CSS) para abrir con el fondo en su estado final

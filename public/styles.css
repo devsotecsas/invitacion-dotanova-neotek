@@ -164,6 +164,16 @@ p { margin: 0; }
   /* En pantallas anchas se acerca la foto para que el texto quede entre las dos escaleras */
   .fondo { --d: calc(var(--alto) * .25); --x: .78; --y: .3; --zoom: 140vw; }
 }
+/* Al disolverse la portada la foto sigue acercándose (1 → 1,04) y queda ahí.
+   Va en su propia capa para no mezclarse con el desplazamiento del descenso. */
+.fondo-zoom {
+  position: absolute;
+  inset: 0;
+  transform: scale(1);
+  transition: transform 2s ease-out;
+}
+body.listo .fondo-zoom { transform: scale(1.04); }
+.fondo.directo .fondo-zoom { transition: none; }   /* enlace /#confirmar: ya en su estado final */
 .fondo-foto {
   --w: max(var(--zoom), calc((var(--alto) + var(--d)) * 1.5));   /* la foto es 3:2 */
   position: absolute;
@@ -535,6 +545,6 @@ body.listo [data-entra] { opacity: 1; transform: none; }
   html { scroll-behavior: auto; }
   .engranaje { transform: none; animation-name: fundido-entra; }
   .engranaje-foto { animation: none; }
-  .fondo-foto { transform: none; }   /* sin desplazamiento: solo el fundido de nítida a textura */
+  .fondo-foto, body.listo .fondo-zoom { transform: none; }   /* sin desplazamiento ni zoom: solo el fundido de nítida a textura */
   [data-entra] { transform: none; transition-property: opacity; }
 }
