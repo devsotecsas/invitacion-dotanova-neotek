@@ -188,6 +188,17 @@ async function serveStatic(req, res, url) {
     const stat = await fsp.stat(file);
     if (!stat.isFile()) throw new Error('no file');
     const ext = path.extname(file).toLowerCase();
+    // CSS y JS se revalidan siempre (como index.html), para que nunca se mezcle un HTML
+    // nuevo con un app.js viejo; Last-Modified + 304 evita volver a descargarlos.
+    if (ext === '.css' || ext === '.js') {
+      const modificado = stat.mtime.toUTCString();
+      const cache = { 'Cache-Control': 'no-cache', 'Last-Modified': modificado };
+      const desde = Date.parse(req.headers['if-modified-since'] || '');
+      if (desde >= Date.parse(modificado)) return send(res, 304, null, cache);
+      res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': MIME[ext], 'Content-Length': stat.size, ...cache });
+      if (req.method === 'HEAD') return res.end();
+      return fs.createReadStream(file).pipe(res);
+    }
     res.writeHead(200, {
       ...SECURITY_HEADERS,
       'Content-Type': MIME[ext] || 'application/octet-stream',
