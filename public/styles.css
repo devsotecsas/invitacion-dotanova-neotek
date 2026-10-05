@@ -20,7 +20,6 @@
   --margen: clamp(18px, 4.4vw, 48px);
   --sombra-texto: 0 1px 14px rgba(0, 0, 0, .55);
   --t-entrada: cubic-bezier(.2, .7, .2, 1);
-  --t-zoom: cubic-bezier(.7, 0, .25, 1);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -65,7 +64,6 @@ p { margin: 0; }
   text-transform: uppercase;
   cursor: pointer;
   overflow: hidden;
-  transition: opacity .55s ease .55s;
 }
 .portada-titulo,
 .portada-pie {
@@ -90,80 +88,142 @@ p { margin: 0; }
   transform-origin: 50% 50%;
 }
 
-/* --- entrada de la portada --- */
+/* En pantallas grandes, título, engranaje y pie forman un solo bloque centrado,
+   de unas 1,7 veces el ancho del engranaje. */
+@media (min-width: 900px) {
+  .portada {
+    --rueda: min(52vw, 580px, calc(100svh - 300px));
+    grid-template-rows: auto auto auto;
+    grid-template-columns: min(90vw, calc(var(--rueda) * 1.7));
+    align-content: center;
+    justify-content: center;
+    row-gap: clamp(20px, 3.2vh, 36px);
+  }
+  .portada-titulo { font-size: max(40px, calc(var(--rueda) * .12)); }
+  .portada-pie { font-size: max(20px, calc(var(--rueda) * .05)); }
+  .engranaje { width: var(--rueda); }
+}
+
+/* --- entrada de la portada (1,2 s): fundido suave, el engranaje pasa de .96 a 1 sin girar --- */
 .portada-titulo span,
 .portada-pie span {
   opacity: 0;
-  transform: translateY(.35em);
-  animation: aparecer .8s var(--t-entrada) forwards;
+  animation: fundido-entra .75s ease-out forwards;
 }
-.portada-titulo span:nth-child(1) { animation-delay: .55s; }
-.portada-titulo span:nth-child(2) { animation-delay: .7s; }
-.portada-titulo span:nth-child(3) { animation-delay: .85s; }
-.portada-pie span:nth-child(1) { animation-delay: 1.05s; }
-.portada-pie span:nth-child(2) { animation-delay: 1.15s; }
+.portada-titulo span:nth-child(1) { animation-delay: .1s; }
+.portada-titulo span:nth-child(2) { animation-delay: .2s; }
+.portada-titulo span:nth-child(3) { animation-delay: .3s; }
+.portada-pie span:nth-child(1) { animation-delay: .3s; }
+.portada-pie span:nth-child(2) { animation-delay: .35s; }
 
 .engranaje {
   opacity: 0;
-  transform: rotate(-45deg) scale(.8);
-  animation: engranaje-entra 1.3s var(--t-entrada) .1s forwards;
+  transform: scale(.96);
+  animation: engranaje-entra 1.2s cubic-bezier(.25, .1, .25, 1) forwards;
 }
-.engranaje-foto { animation: foto-respira 6s ease-in-out 1.2s infinite alternate; }
+/* Zoom in continuo y casi imperceptible de la foto: +5 % en todo el tiempo de la portada */
+.engranaje-foto { animation: foto-acerca 10s linear forwards; }
 
+@keyframes fundido-entra { from { opacity: 0; } to { opacity: 1; } }
 @keyframes aparecer { to { opacity: 1; transform: none; } }
-@keyframes engranaje-entra { to { opacity: 1; transform: rotate(0) scale(1); } }
-@keyframes foto-respira { from { transform: scale(1); } to { transform: scale(1.06); } }
+@keyframes engranaje-entra { to { opacity: 1; transform: scale(1); } }
+@keyframes foto-acerca { from { transform: scale(1); } to { transform: scale(1.05); } }
 
-/* --- salida: el engranaje gira un diente y se abre hacia la invitación --- */
-.portada.saliendo { opacity: 0; pointer-events: none; }
-.portada.saliendo .portada-titulo span,
-.portada.saliendo .portada-pie span {
+/* --- salida: la anima app.js (texto se desvanece, zoom lento del engranaje, fundido) --- */
+.portada.saliendo { pointer-events: none; cursor: default; }
+
+/* ==========================================================
+   FONDO CONTINUO (detrás de invitación y formulario)
+   Una sola capa fija. app.js pone en .fondo:
+     --p  avance del descenso, de 0 (invitación) a 1 (formulario)
+     --t  opacidad de la versión con textura
+   La foto se desplaza hacia arriba --d en todo el recorrido, como si la
+   cámara bajara por la escalera. Sin background-attachment: fixed (iOS).
+   ========================================================== */
+.fondo {
+  --alto: 100vh;
+  --d: calc(var(--alto) * .35);    /* cuánto sube la foto en el descenso */
+  --x: .74;                        /* encuadre horizontal (0 izquierda, 1 derecha) */
+  --y: 0;                          /* encuadre vertical inicial */
+  --zoom: 0px;                     /* ancho mínimo de la foto */
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  width: 100%;
+  height: var(--alto);
+  overflow: hidden;
+  pointer-events: none;
+  background: #2b2b2a;
+}
+@supports (height: 100lvh) {
+  /* el alto mayor del visor: no cambia cuando la barra de Safari se esconde */
+  .fondo { --alto: 100lvh; }
+}
+@media (min-width: 900px) {
+  /* En pantallas anchas se acerca la foto para que el texto quede entre las dos escaleras */
+  .fondo { --d: calc(var(--alto) * .25); --x: .78; --y: .3; --zoom: 140vw; }
+}
+.fondo-foto {
+  --w: max(var(--zoom), calc((var(--alto) + var(--d)) * 1.5));   /* la foto es 3:2 */
+  position: absolute;
+  left: calc((100% - var(--w)) * var(--x));
+  top: calc((var(--alto) + var(--d) - var(--w) / 1.5) * var(--y));
+  width: var(--w);
+  height: calc(var(--w) / 1.5);
+  transform: translate3d(0, calc(var(--p, 0) * var(--d) * -1), 0);
+}
+.fondo-nitida,
+.fondo-textura,
+.fondo-textura::before,
+.fondo-velo {
+  position: absolute;
+  inset: 0;
+}
+.fondo-nitida {
+  background: url("/assets/foto-nitida-1200.webp") center / 100% 100% no-repeat;
+  filter: contrast(1.05);
+}
+.fondo-textura { opacity: var(--t, 0); }
+/* La textura solo se pide cuando hace falta (app.js agrega .con-textura al empezar a bajar) */
+.fondo-textura::before {
+  content: "";
+  background: center / 100% 100% no-repeat;
   opacity: 0;
-  transform: translateY(-.35em);
-  transition: opacity .3s ease, transform .3s ease;
-  animation: none;
+  transition: opacity .6s ease;
 }
-.portada.saliendo .engranaje {
-  animation: none;
+.fondo.con-textura .fondo-textura::before {
+  background-image: url("/assets/foto-textura-1200.webp");
   opacity: 1;
-  transform: rotate(45deg) scale(var(--zoom, 6));
-  transition: transform 1.15s var(--t-zoom);
 }
-.portada.saliendo .engranaje-foto { animation-play-state: paused; }
+/* misma consulta que FOTO_GRANDE en app.js */
+@media (min-width: 900px), (min-resolution: 2dppx) and (min-width: 600px) {
+  .fondo-nitida { background-image: url("/assets/foto-nitida-2400.webp"); }
+  .fondo.con-textura .fondo-textura::before { background-image: url("/assets/foto-textura-2400.webp"); }
+}
+.fondo-velo-invitacion {
+  background: linear-gradient(180deg, rgba(20, 20, 19, .62) 0%, rgba(20, 20, 19, .28) 34%, rgba(20, 20, 19, .28) 60%, rgba(20, 20, 19, .72) 100%);
+  opacity: calc(1 - var(--t, 0));
+}
+.fondo-velo-confirmar {
+  background: linear-gradient(180deg, rgba(20, 20, 19, .25), rgba(20, 20, 19, .5));
+  opacity: var(--t, 0);
+}
+@media (min-width: 900px) {
+  .fondo-velo-confirmar { background: linear-gradient(90deg, rgba(20, 20, 19, .2), rgba(20, 20, 19, .45)); }
+}
 
 /* ==========================================================
    2. INVITACIÓN
    ========================================================== */
 .invitacion {
   position: relative;
+  z-index: 1;
   min-height: 100svh;
   display: grid;
   overflow: hidden;
   isolation: isolate;
 }
-.invitacion-fondo {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background:
-    linear-gradient(180deg, rgba(20, 20, 19, .62) 0%, rgba(20, 20, 19, .28) 34%, rgba(20, 20, 19, .28) 60%, rgba(20, 20, 19, .72) 100%),
-    url("/assets/foto-nitida-1200.webp") 74% 0 / cover no-repeat;
-  filter: contrast(1.05);
-  transform: scale(1.08);
-  transition: transform 1.6s var(--t-entrada);
-}
-@media (min-width: 900px), (min-resolution: 2dppx) and (min-width: 600px) {
-  .invitacion-fondo {
-    background-image:
-      linear-gradient(180deg, rgba(20, 20, 19, .62) 0%, rgba(20, 20, 19, .28) 34%, rgba(20, 20, 19, .28) 60%, rgba(20, 20, 19, .72) 100%),
-      url("/assets/foto-nitida-2400.webp");
-  }
-}
-@media (min-width: 900px) {
-  /* En pantallas anchas se acerca la foto para que el texto quede entre las dos escaleras */
-  .invitacion-fondo { background-size: 140% auto; background-position: 78% 32%; }
-}
-body.listo .invitacion-fondo { transform: none; }
 
 .invitacion-contenido {
   width: min(100%, 640px);
@@ -269,12 +329,13 @@ body.listo .invitacion-fondo { transform: none; }
 .boton:focus-visible { outline: 3px solid var(--perla); outline-offset: 4px; }
 .boton[disabled] { opacity: .75; cursor: progress; }
 
-/* --- revelado de la invitación (una sola secuencia, después de la portada) --- */
+/* --- revelado de la invitación: fundidos suaves y escalonados (0,15 s entre bloques),
+       desde que empieza el fundido de la portada --- */
 [data-entra] {
   opacity: 0;
-  transform: translateY(12px);
-  transition: opacity .7s var(--t-entrada), transform .7s var(--t-entrada);
-  transition-delay: calc(.6s + var(--i, 0) * .12s);
+  transform: translateY(8px);
+  transition: opacity .9s ease-out, transform .9s ease-out;
+  transition-delay: calc(.35s + var(--i, 0) * .15s);
 }
 body.listo [data-entra] { opacity: 1; transform: none; }
 
@@ -283,6 +344,7 @@ body.listo [data-entra] { opacity: 1; transform: none; }
    ========================================================== */
 .confirmar {
   position: relative;
+  z-index: 1;
   min-height: 100svh;
   display: grid;
   align-content: center;
@@ -291,23 +353,6 @@ body.listo [data-entra] { opacity: 1; transform: none; }
   isolation: isolate;
   scroll-margin-top: 0;
 }
-.confirmar-fondo {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background:
-    linear-gradient(180deg, rgba(20, 20, 19, .25), rgba(20, 20, 19, .5)),
-    url("/assets/foto-textura-1200.webp") 78% 30% / auto 190% no-repeat;
-  background-color: #3a3a38;
-}
-@media (min-width: 900px) {
-  .confirmar-fondo {
-    background:
-      linear-gradient(90deg, rgba(20, 20, 19, .2), rgba(20, 20, 19, .45)),
-      url("/assets/foto-textura-2400.webp") center 30% / cover no-repeat;
-  }
-}
-
 .formulario { display: grid; gap: clamp(28px, 5vh, 48px); }
 
 /* La etiqueta de corte diagonal del brandbook: sale del borde izquierdo,
@@ -400,6 +445,13 @@ body.listo [data-entra] { opacity: 1; transform: none; }
   line-height: 1.3;
 }
 .campo-error:empty { display: none; }
+.campo-ayuda {
+  padding-inline-start: 24px;
+  color: var(--carbon);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+}
 .campo-error-claro { color: var(--error-claro); padding: 0; text-align: center; text-shadow: var(--sombra-texto); }
 
 .trampa { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
@@ -481,10 +533,8 @@ body.listo [data-entra] { opacity: 1; transform: none; }
    ========================================================== */
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .engranaje, .engranaje-foto,
-  .portada-titulo span, .portada-pie span { animation: none !important; opacity: 1; transform: none !important; }
-  .portada.saliendo .engranaje { transform: none !important; transition: none; }
-  .portada { transition: opacity .4s ease; }
-  .invitacion-fondo { transform: none; transition: none; }
-  [data-entra] { transform: none; transition: opacity .4s ease; transition-delay: 0s; }
+  .engranaje { transform: none; animation-name: fundido-entra; }
+  .engranaje-foto { animation: none; }
+  .fondo-foto { transform: none; }   /* sin desplazamiento: solo el fundido de nítida a textura */
+  [data-entra] { transform: none; transition-property: opacity; }
 }

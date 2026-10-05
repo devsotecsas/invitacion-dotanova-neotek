@@ -100,6 +100,7 @@ function validar(input) {
     cargo: clean(input.cargo),
     celular: clean(input.celular, 30),
     correo: clean(input.correo, 160).toLowerCase(),
+    alergia: clean(input.alergia, 200), // opcional (dato sensible, Ley 1581)
     acepta: input.acepta === true,
   };
   const errores = {};
@@ -158,7 +159,7 @@ async function handleApi(req, res, url) {
     const ok = token.length === ADMIN_TOKEN.length && crypto.timingSafeEqual(Buffer.from(token), Buffer.from(ADMIN_TOKEN));
     if (!ok) return send(res, 401, 'Token inválido');
     const filas = await leerConfirmaciones();
-    const cols = ['fecha', 'nombre', 'empresa', 'cargo', 'celular', 'correo', 'acepta', 'autorizacion_texto'];
+    const cols = ['fecha', 'nombre', 'empresa', 'cargo', 'celular', 'correo', 'alergia', 'acepta', 'autorizacion_texto'];
     const csv = '\uFEFF' + [cols.join(';'), ...filas.map((f) => cols.map((c) => csvCell(f[c])).join(';'))].join('\r\n');
     return send(res, 200, csv, {
       'Content-Type': 'text/csv; charset=utf-8',

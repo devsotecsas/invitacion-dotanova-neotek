@@ -44,9 +44,19 @@
   </div>
 
   <main>
+    <!-- Fondo continuo detrás de invitación y formulario: al bajar, la foto nítida
+         se desplaza hacia arriba y se funde en la versión con textura (ver app.js). -->
+    <div class="fondo" aria-hidden="true">
+      <div class="fondo-foto">
+        <div class="fondo-nitida"></div>
+        <div class="fondo-textura"></div>
+      </div>
+      <div class="fondo-velo fondo-velo-invitacion"></div>
+      <div class="fondo-velo fondo-velo-confirmar"></div>
+    </div>
+
     <!-- ============ 2. INVITACIÓN ============ -->
     <section class="invitacion" id="invitacion" aria-labelledby="titulo-invitacion">
-      <div class="invitacion-fondo" aria-hidden="true"></div>
 
       <div class="invitacion-contenido">
         <header class="logos" data-entra style="--i:0">
@@ -84,7 +94,6 @@
 
     <!-- ============ 3. FORMULARIO ============ -->
     <section class="confirmar" id="confirmar" aria-labelledby="titulo-confirmar">
-      <div class="confirmar-fondo" aria-hidden="true"></div>
       <h2 id="titulo-confirmar" class="sr-only">Confirma tu asistencia</h2>
 
       <form class="formulario" id="formulario" novalidate>
@@ -115,6 +124,11 @@
               <input id="correo" name="correo" type="email" inputmode="email" autocomplete="email" placeholder="Ej: cm@correocorporativo.com" maxlength="160" required>
               <p class="campo-error" id="error-correo" aria-live="polite"></p>
             </div>
+            <div class="campo campo-ancho">
+              <label for="alergia">Alergias</label>
+              <input id="alergia" name="alergia" type="text" autocomplete="off" placeholder="Ej: Maní, mariscos. Si no tienes, déjalo vacío" maxlength="200" aria-describedby="ayuda-alergia">
+              <p class="campo-ayuda" id="ayuda-alergia">Opcional. Solo lo usaremos para la alimentación y atención del evento.</p>
+            </div>
             <!-- trampa para bots: las personas no la ven -->
             <div class="trampa" aria-hidden="true"><label for="sitio">Sitio web</label><input id="sitio" name="sitio" type="text" tabindex="-1" autocomplete="off"></div>
           </div>
@@ -131,7 +145,7 @@
             <input type="checkbox" id="acepta" name="acepta" required>
             <span class="casilla" aria-hidden="true"></span>
             <!-- TEXTO LEGAL: confirmar con DOTANOVA/NEOTEK la razón social y el enlace a la política de datos -->
-            <span>Acepto que DOTANOVA y NEOTEK traten mis datos personales para gestionar mi asistencia a este evento, conforme a la Ley 1581 de 2012 y a su <a href="#" target="_blank" rel="noopener">política de tratamiento de datos</a>.</span>
+            <span>Acepto que DOTANOVA y NEOTEK traten mis datos personales para gestionar mi asistencia a este evento, conforme a la Ley 1581 de 2012 y a su <a href="#" target="_blank" rel="noopener">política de tratamiento de datos</a>. La información sobre alergias es un dato sensible, responderla es opcional y solo se usará para la logística del evento.</span>
           </label>
           <p class="campo-error campo-error-claro" id="error-acepta" aria-live="polite"></p>
           <button class="boton" type="submit" id="enviar">Enviar confirmación</button>

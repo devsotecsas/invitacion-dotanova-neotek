@@ -40,4 +40,4 @@ CSV separado por `;` con BOM, abre directo en Excel. Si una persona confirma dos
 ## Antes de enviar la invitación
 - Logos oficiales en `public/assets/logos/` (ver LEEME.txt).
 - Texto de autorización de datos: razón social y enlace real a la política de tratamiento (en `index.html`, busca "TEXTO LEGAL").
-- Tiempo de la portada: `ESPERA_AUTOMATICA` en `public/app.js` (3,4 s).
+- Tiempo de la portada: `ENTRADA` + `LECTURA` = `ESPERA_AUTOMATICA` en `public/app.js` (6,7 s); la salida dura `SALIDA` (2,8 s).
