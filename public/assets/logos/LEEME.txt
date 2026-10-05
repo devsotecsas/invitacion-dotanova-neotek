@@ -1,0 +1,5 @@
+Pon aquí los logos oficiales en blanco (fondo transparente):
+  dotanova.svg
+  neotek.svg
+Si existen, la página los usa sola; si no, muestra la versión de respaldo hecha con texto.
+También sirven PNG: en ese caso cambia la ruta en data-logo dentro de index.html.
