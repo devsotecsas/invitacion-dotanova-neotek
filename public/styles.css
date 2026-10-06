@@ -261,6 +261,10 @@ body.listo .fondo-zoom { transform: scale(1.04); }
 }
 .logo { display: flex; flex-direction: column; color: #fff; filter: drop-shadow(0 2px 10px rgba(0, 0, 0, .45)); }
 .logo-oficial { height: clamp(46px, 11vw, 72px); width: auto; }
+/* Alturas separadas para equilibrar el peso visual de los dos logos.
+   dotanova-claro.svg tiene el viewBox ajustado al dibujo (proporción ≈ 6:1). */
+.logo-dotanova .logo-oficial { height: clamp(26px, 6.4vw, 42px); }
+.logo-neotek .logo-oficial { height: clamp(46px, 11vw, 72px); }
 
 .logo-dotanova { align-items: center; gap: 6px; }
 .logo-dotanova-icono { width: clamp(26px, 6vw, 38px); height: auto; }
@@ -273,7 +277,7 @@ body.listo .fondo-zoom { transform: scale(1.04); }
 .logo-neotek { align-items: flex-end; }
 .logo-neotek-texto {
   font-family: var(--display);
-  font-size: clamp(34px, 9.4vw, 58px);
+  font-size: clamp(32px, 8.6vw, 52px);
   line-height: .9;
   letter-spacing: .02em;
 }
