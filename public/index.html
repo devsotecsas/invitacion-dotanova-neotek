@@ -3,18 +3,19 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Save the date · 24 de noviembre · Cartagena | DOTANOVA + NEOTEK</title>
-  <meta name="description" content="Después de este tiempo construyendo juntos, queremos compartir personalmente lo que viene. 24 de noviembre, Cartagena, Colombia. Confirma tu asistencia.">
+  <title>{{TITULO}}</title>
+  <meta name="description" content="{{DESCRIPCION}}">
   <meta name="theme-color" content="#212120">
   <meta name="robots" content="noindex">
 
+  <!-- Título, descripción, og:image y og:url los pone server.js según la versión -->
   <meta property="og:type" content="website">
-  <meta property="og:title" content="Save the date · 24 de noviembre, Cartagena">
-  <meta property="og:description" content="DOTANOVA y NEOTEK te invitan. Confirma tu asistencia.">
-  <meta property="og:image" content="{{URL_BASE}}/assets/og-invitacion.jpg">
+  <meta property="og:title" content="{{TITULO}}">
+  <meta property="og:description" content="{{DESCRIPCION}}">
+  <meta property="og:image" content="{{URL_BASE}}{{OG_IMAGEN}}">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:url" content="{{URL_BASE}}/">
+  <meta property="og:url" content="{{URL_BASE}}/?p={{PARAMETRO}}">
   <meta name="twitter:card" content="summary_large_image">
 
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -24,7 +25,7 @@
   <link rel="preload" as="image" href="/assets/engranaje-foto.webp">
   <link rel="stylesheet" href="/styles.css">
 </head>
-<body class="bloqueado">
+<body class="bloqueado" data-version="{{VERSION}}">
 
   <!-- ============ 1. PORTADA: Save the date ============ -->
   <div class="portada" id="portada" aria-hidden="true">
@@ -81,26 +82,32 @@
         </header>
 
         <div class="invitacion-mensaje" data-entra style="--i:1">
-          <h1 id="titulo-invitacion" class="sr-only">DOTANOVA y NEOTEK te invitan: 24 de noviembre, Cartagena, Colombia</h1>
-          <p>Lo que un equipo lleva puesto dice más de lo que parece.Una cena privada con Dotanova y Neotek para ver a la indumentaria de otra manera.</p>
-          <p><span class="acento">Después de este tiempo</span> construyendo juntos, queremos compartir personalmente lo que viene para nuestras empresas y deseamos que seas parte.</p>
+          <h1 id="titulo-invitacion" class="invitacion-titular" tabindex="-1">Lo que un equipo lleva puesto dice más de lo que parece.</h1>
+          <!-- Texto central, cierre y evento: los pone server.js según la versión (?p=actuales / ?p=potenciales) -->
+          <p>{{TEXTO_CENTRAL}}</p>
+          <p class="invitacion-cupos">Esta invitación incluye un acompañante.</p>
         </div>
 
         <div class="invitacion-cierre">
-          <p data-entra style="--i:2">Una invitación que no te puedes perder. <br>Lo que tu equipo lleva puesto, dice más de lo que te imaginas</p>
-          <a class="boton" href="#confirmar" id="ir-a-confirmar" data-entra style="--i:3">Reservar mi lugar</a>
-          <p class="invitacion-fecha" data-entra style="--i:4">Cartagena, 24 de noviembre: queremos mostrarte algo</strong></p>
+          <p data-entra style="--i:2">{{CIERRE}}</p>
+          <div class="botones" data-entra style="--i:3">
+            <a class="boton" href="#confirmar" id="ir-a-confirmar">Reservar mi lugar</a>
+            <a class="boton boton-secundario" href="#declinar" id="ir-a-declinar">No podré asistir</a>
+          </div>
+          <p class="invitacion-fecha" data-entra style="--i:4">{{EVENTO}}</p>
         </div>
       </div>
     </section>
 
-    <!-- ============ 3. FORMULARIO ============ -->
+    <!-- ============ 3. FORMULARIOS (reservar / no podré asistir) ============ -->
     <section class="confirmar" id="confirmar" aria-labelledby="titulo-confirmar">
       <h2 id="titulo-confirmar" class="sr-only">Reservar mi lugar</h2>
 
-      <form class="formulario" id="formulario" novalidate>
+      <!-- Reservar mi lugar -->
+      <form class="formulario" id="form-reserva" novalidate>
         <div class="etiqueta">
-          <div class="etiqueta-campos" id="campos">
+          <div class="etiqueta-campos">
+            <a class="volver campo-ancho" href="#invitacion">Volver a la invitación</a>
             <div class="campo campo-ancho">
               <label for="nombre">Nombre completo</label>
               <input id="nombre" name="nombre" type="text" autocomplete="name" placeholder="Ej: Isabella Ariza Colmenares" maxlength="120" required>
@@ -126,6 +133,39 @@
               <input id="correo" name="correo" type="email" inputmode="email" autocomplete="email" placeholder="Ej: cm@correocorporativo.com" maxlength="160" required>
               <p class="campo-error" id="error-correo" aria-live="polite"></p>
             </div>
+
+            <div class="campo campo-ancho" id="personas" role="radiogroup" aria-labelledby="titulo-personas" aria-required="true">
+              <p class="campo-titulo" id="titulo-personas">¿Asistirá con acompañante?</p>
+              <div class="opciones">
+                <label class="opcion">
+                  <input type="radio" name="personas" value="1">
+                  <span class="opcion-pildora">Asistiré solo</span>
+                </label>
+                <label class="opcion">
+                  <input type="radio" name="personas" value="2">
+                  <span class="opcion-pildora">Asistiré con un acompañante</span>
+                </label>
+              </div>
+              <p class="campo-error" id="error-personas" aria-live="polite"></p>
+            </div>
+
+            <!-- Solo si asiste con acompañante (app.js los muestra, oculta y vacía) -->
+            <div class="campo campo-ancho" data-acompanante hidden>
+              <label for="acompanante_nombre">Nombre completo del acompañante</label>
+              <input id="acompanante_nombre" name="acompanante_nombre" type="text" autocomplete="off" maxlength="120" disabled>
+              <p class="campo-error" id="error-acompanante_nombre" aria-live="polite"></p>
+            </div>
+            <div class="campo campo-ancho" data-acompanante hidden>
+              <label for="acompanante_cargo_empresa">Cargo y empresa del acompañante</label>
+              <input id="acompanante_cargo_empresa" name="acompanante_cargo_empresa" type="text" autocomplete="off" maxlength="160" disabled>
+              <p class="campo-error" id="error-acompanante_cargo_empresa" aria-live="polite"></p>
+            </div>
+            <div class="campo campo-ancho" data-acompanante hidden>
+              <label for="acompanante_alergia">Alergias del acompañante</label>
+              <input id="acompanante_alergia" name="acompanante_alergia" type="text" autocomplete="off" placeholder="Ej: Maní, mariscos" maxlength="200" aria-describedby="ayuda-acompanante_alergia" disabled>
+              <p class="campo-ayuda" id="ayuda-acompanante_alergia">Opcional. Solo lo usaremos para la alimentación y atención del evento.</p>
+            </div>
+
             <div class="campo campo-ancho">
               <label for="alergia">Alergias</label>
               <input id="alergia" name="alergia" type="text" autocomplete="off" placeholder="Ej: Maní, mariscos" maxlength="200" aria-describedby="ayuda-alergia">
@@ -134,26 +174,71 @@
             <!-- trampa para bots: las personas no la ven -->
             <div class="trampa" aria-hidden="true"><label for="sitio">Sitio web</label><input id="sitio" name="sitio" type="text" tabindex="-1" autocomplete="off"></div>
           </div>
-
-          <div class="etiqueta-gracias" id="gracias" hidden tabindex="-1">
-            <p class="gracias-titulo" id="gracias-titulo">¡Te esperamos!</p>
-            <p id="gracias-texto">Tu asistencia quedó confirmada. Te enviaremos los detalles completos a tu correo.</p>
-            <p class="gracias-fecha">24 de noviembre · Cartagena, Colombia</p>
-          </div>
         </div>
 
-        <div class="formulario-pie" id="formulario-pie">
+        <div class="formulario-pie">
           <label class="autorizacion">
             <input type="checkbox" id="acepta" name="acepta" required>
             <span class="casilla" aria-hidden="true"></span>
-            <!-- TEXTO LEGAL: confirmar con DOTANOVA/NEOTEK la razón social y el enlace a la política de datos -->
-            <span>Acepto que DOTANOVA y NEOTEK traten mis datos personales para gestionar mi asistencia a este evento, conforme a la Ley 1581 de 2012 y a su <a href="#" target="_blank" rel="noopener">política de tratamiento de datos</a>. La información sobre alergias es un dato sensible, responderla es opcional y solo se usará para la logística del evento.</span>
+            <!-- TEXTO LEGAL PENDIENTE: es el texto sugerido; reemplazar por el aprobado por DOTANOVA/NEOTEK -->
+            <!-- POLITICA_PENDIENTE: poner la URL real de la política de tratamiento de datos en href -->
+            <span>Acepto que DOTANOVA y NEOTEK traten mis datos personales para gestionar mi asistencia a este evento, conforme a la Ley 1581 de 2012 y a su <a href="#" target="_blank" rel="noopener">política de tratamiento de datos</a>. La información sobre alergias es un dato sensible, responderla es opcional y solo se usará para la logística del evento. Si registro a un acompañante, declaro que cuento con su autorización para compartir sus datos.</span>
           </label>
           <p class="campo-error campo-error-claro" id="error-acepta" aria-live="polite"></p>
-          <button class="boton" type="submit" id="enviar">Enviar confirmación</button>
-          <p class="formulario-estado" id="estado" role="status" aria-live="polite"></p>
+          <button class="boton" type="submit">Confirmar asistencia</button>
+          <p class="formulario-estado" role="status" aria-live="polite"></p>
         </div>
       </form>
+
+      <!-- No podré asistir -->
+      <form class="formulario" id="form-declina" novalidate hidden>
+        <div class="etiqueta">
+          <div class="etiqueta-campos">
+            <a class="volver campo-ancho" href="#invitacion">Volver a la invitación</a>
+            <div class="campo campo-ancho">
+              <label for="d-nombre">Nombre completo</label>
+              <input id="d-nombre" name="nombre" type="text" autocomplete="name" placeholder="Ej: Isabella Ariza Colmenares" maxlength="120" required>
+              <p class="campo-error" id="error-d-nombre" aria-live="polite"></p>
+            </div>
+            <div class="campo campo-ancho">
+              <label for="d-empresa">Empresa</label>
+              <input id="d-empresa" name="empresa" type="text" autocomplete="organization" placeholder="Ej: Dotaciones Nova SAS" maxlength="120" required>
+              <p class="campo-error" id="error-d-empresa" aria-live="polite"></p>
+            </div>
+            <label class="casilla-opcion campo-ancho">
+              <input type="checkbox" id="d-coordinar" name="coordinar">
+              <span class="casilla" aria-hidden="true"></span>
+              <span>Me gustaría coordinar otro espacio con el equipo</span>
+            </label>
+            <!-- trampa para bots: las personas no la ven -->
+            <div class="trampa" aria-hidden="true"><label for="d-sitio">Sitio web</label><input id="d-sitio" name="sitio" type="text" tabindex="-1" autocomplete="off"></div>
+          </div>
+        </div>
+
+        <div class="formulario-pie">
+          <label class="autorizacion">
+            <input type="checkbox" id="d-acepta" name="acepta" required>
+            <span class="casilla" aria-hidden="true"></span>
+            <!-- POLITICA_PENDIENTE: poner la URL real de la política de tratamiento de datos en href -->
+            <span>Acepto que DOTANOVA y NEOTEK traten mis datos personales para registrar mi respuesta, conforme a la Ley 1581 de 2012 y a su <a href="#" target="_blank" rel="noopener">política de tratamiento de datos</a>.</span>
+          </label>
+          <p class="campo-error campo-error-claro" id="error-d-acepta" aria-live="polite"></p>
+          <button class="boton" type="submit">Enviar respuesta</button>
+          <p class="formulario-estado" role="status" aria-live="polite"></p>
+        </div>
+      </form>
+
+      <!-- Mensaje de respuesta (reemplaza al formulario enviado) -->
+      <div class="formulario" id="respuesta" hidden>
+        <div class="etiqueta">
+          <div class="etiqueta-gracias" id="gracias" tabindex="-1">
+            <p class="gracias-titulo" id="gracias-titulo"></p>
+            <p id="gracias-texto"></p>
+            <a class="boton boton-oscuro" href="/cena.ics" id="calendario" download>Agregar al calendario</a>
+            <a class="volver" href="#invitacion">Volver a la invitación</a>
+          </div>
+        </div>
+      </div>
     </section>
   </main>
 

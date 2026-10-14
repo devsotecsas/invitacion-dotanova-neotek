@@ -73,7 +73,8 @@ function readBody(req, limit = 10 * 1024) {
   });
 }
 
-// Límite simple de envíos por IP (en memoria): 8 cada 10 minutos.
+// Límite simple de envíos por IP (en memoria): 30 cada 10 minutos.
+// Holgado porque los operadores móviles comparten una IP entre muchas personas.
 const hits = new Map();
 function rateLimited(ip) {
   const now = Date.now();
@@ -81,7 +82,7 @@ function rateLimited(ip) {
   const list = (hits.get(ip) || []).filter((t) => now - t < windowMs);
   list.push(now);
   hits.set(ip, list);
-  return list.length > 8;
+  return list.length > 30;
 }
 setInterval(() => {
   const now = Date.now();
@@ -90,85 +91,267 @@ setInterval(() => {
 
 // ---------- validación ----------
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const ID_RE = /^[A-Za-z0-9-]{1,20}$/;
+// Versión del texto de autorización que acepta la persona, según el tipo de respuesta.
+const AUTORIZACION = { Confirmado: 'v3-reserva-2026-10', 'Declinó': 'v1-declina-2026-10' };
+
 function clean(v, max = 120) {
   return String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 }
 function validar(input) {
+  const respuesta = input.respuesta === 'Confirmado' || input.respuesta === 'Declinó' ? input.respuesta : '';
+  const idInvitado = String(input.id_invitado ?? '');
   const datos = {
+    respuesta,
+    version: input.version === 'Actual' ? 'Actual' : 'Potencial',
+    id_invitado: ID_RE.test(idInvitado) ? idInvitado : '',
+    personas: 0,
     nombre: clean(input.nombre),
     empresa: clean(input.empresa),
-    cargo: clean(input.cargo),
-    celular: clean(input.celular, 30),
-    correo: clean(input.correo, 160).toLowerCase(),
-    alergia: clean(input.alergia, 200), // opcional (dato sensible, Ley 1581)
+    cargo: '',
+    celular: '',
+    correo: '',
+    alergia: '',
+    acompanante_nombre: '',
+    acompanante_cargo_empresa: '',
+    acompanante_alergia: '',
+    coordinar_otro_espacio: '',
     acepta: input.acepta === true,
   };
   const errores = {};
-  if (datos.nombre.length < 3) errores.nombre = 'Escribe tu nombre completo.';
-  if (datos.empresa.length < 2) errores.empresa = 'Escribe el nombre de tu empresa.';
-  if (datos.cargo.length < 2) errores.cargo = 'Escribe tu cargo.';
-  const digitos = datos.celular.replace(/[^\d]/g, '');
-  if (digitos.length < 7 || digitos.length > 15) errores.celular = 'Escribe un número de celular válido.';
-  if (!EMAIL_RE.test(datos.correo)) errores.correo = 'Escribe un correo válido, ej. nombre@empresa.com.';
-  if (!datos.acepta) errores.acepta = 'Necesitamos tu autorización para registrar tu asistencia.';
+  if (datos.nombre.length < 3) errores.nombre = 'Falta el nombre completo.';
+  if (datos.empresa.length < 2) errores.empresa = 'Falta el nombre de la empresa.';
+
+  if (respuesta === 'Confirmado') {
+    const personas = Number(input.personas);
+    const conAcompanante = personas === 2;
+    Object.assign(datos, {
+      personas,
+      cargo: clean(input.cargo),
+      celular: clean(input.celular, 30),
+      correo: clean(input.correo, 160).toLowerCase(),
+      alergia: clean(input.alergia, 200), // opcional (dato sensible, Ley 1581)
+      // Los datos del acompañante solo se guardan si asiste con acompañante.
+      acompanante_nombre: conAcompanante ? clean(input.acompanante_nombre) : '',
+      acompanante_cargo_empresa: conAcompanante ? clean(input.acompanante_cargo_empresa, 160) : '',
+      acompanante_alergia: conAcompanante ? clean(input.acompanante_alergia, 200) : '',
+    });
+    if (datos.cargo.length < 2) errores.cargo = 'Falta el cargo.';
+    const digitos = datos.celular.replace(/[^\d]/g, '');
+    if (digitos.length < 7 || digitos.length > 15) errores.celular = 'El número de celular no es válido.';
+    if (!EMAIL_RE.test(datos.correo)) errores.correo = 'El correo no es válido. Ejemplo: nombre@empresa.com';
+    if (personas !== 1 && personas !== 2) errores.personas = 'Falta elegir: asistir solo o con un acompañante.';
+    if (conAcompanante && datos.acompanante_nombre.length < 3) errores.acompanante_nombre = 'Falta el nombre completo del acompañante.';
+    if (conAcompanante && datos.acompanante_cargo_empresa.length < 2) errores.acompanante_cargo_empresa = 'Faltan el cargo y la empresa del acompañante.';
+    if (!datos.acepta) errores.acepta = 'Falta la autorización de tratamiento de datos.';
+  } else {
+    datos.coordinar_otro_espacio = input.coordinar === true ? 'Sí' : 'No';
+    if (!datos.acepta) errores.acepta = 'Falta la autorización de tratamiento de datos.';
+  }
   return { datos, errores };
 }
 
 // ---------- almacenamiento ----------
-async function leerConfirmaciones() {
+const COLUMNAS = [
+  'fecha', 'respuesta', 'version', 'id_invitado', 'personas', 'nombre', 'empresa', 'cargo', 'celular', 'correo',
+  'alergia', 'acompanante_nombre', 'acompanante_cargo_empresa', 'acompanante_alergia', 'coordinar_otro_espacio',
+  'autorizacion_texto', 'posible_spam',
+];
+
+// Todas las respuestas, en orden de fecha. Los registros anteriores a las dos versiones
+// (sin respuesta ni versión) eran confirmaciones de una persona.
+async function leerRespuestas() {
   let raw = '';
   try { raw = await fsp.readFile(DATA_FILE, 'utf8'); } catch { return []; }
-  const porCorreo = new Map();
+  const filas = [];
   for (const line of raw.split('\n')) {
     if (!line.trim()) continue;
     try {
       const r = JSON.parse(line);
-      porCorreo.set(r.correo, r); // si alguien confirma dos veces, queda el registro más reciente
+      const respuesta = r.respuesta || 'Confirmado';
+      filas.push({
+        ...r,
+        respuesta,
+        version: r.version || '',
+        id_invitado: r.id_invitado || '',
+        personas: r.personas ?? (respuesta === 'Declinó' ? 0 : 1),
+        coordinar_otro_espacio: r.coordinar_otro_espacio || '',
+        posible_spam: r.posible_spam || 'No',
+      });
     } catch { /* línea dañada: se ignora */ }
   }
-  return [...porCorreo.values()];
+  return filas.sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)));
 }
+
+// Ids de prueba (PRUEBA-001…): solo salen en la exportación de auditoría.
+const esPrueba = (r) => /^PRUEBA-/i.test(r.id_invitado);
+
+// Si alguien responde varias veces queda la respuesta más reciente: por id de invitado,
+// si no hay id por correo, y si no hay ninguno (declinaciones sin id) se conservan todas.
+// respuestas_mismo_id cuenta las respuestas de ese id (más de una puede ser un enlace reenviado).
+function agruparRespuestas(todas) {
+  const filas = todas.filter((r) => !esPrueba(r));
+  const porId = new Map();
+  filas.forEach((r) => { if (r.id_invitado) porId.set(r.id_invitado, (porId.get(r.id_invitado) || 0) + 1); });
+  const ultimas = new Map();
+  filas.forEach((r, i) => {
+    const clave = r.id_invitado ? `id:${r.id_invitado}` : r.correo ? `correo:${String(r.correo).toLowerCase()}` : `fila:${i}`;
+    ultimas.delete(clave);
+    ultimas.set(clave, r);
+  });
+  return [...ultimas.values()]
+    .map((r) => ({ ...r, respuestas_mismo_id: r.id_invitado ? porId.get(r.id_invitado) : '' }))
+    .sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)));
+}
+
 function csvCell(v) {
   let s = String(v ?? '');
   if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; // evita inyección de fórmulas en Excel
   return /[";\n,]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+// ---------- calendario ----------
+const EVENTO = {
+  uid: 'cena-dotanova-neotek-20261124@invitacion',
+  // HORAS PENDIENTES: confirmar con el cliente (sugeridas 7:00 p. m. a 10:00 p. m., hora de Colombia)
+  inicio: '20261124T190000',
+  fin: '20261124T220000',
+  resumen: 'Cena Dotanova × Neotek · Cartagena',
+  lugar: 'Cartagena, Colombia',
+  descripcion: 'Hora y lugar por confirmar.',
+};
+function icsTexto(v) {
+  return String(v).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+}
+function icsLinea(linea) {
+  // RFC 5545: líneas de máximo 75 octetos; las siguientes empiezan con un espacio.
+  const partes = [];
+  let actual = '';
+  for (const ch of linea) {
+    if (Buffer.byteLength(actual + ch, 'utf8') > (partes.length ? 74 : 75)) { partes.push(actual); actual = ''; }
+    actual += ch;
+  }
+  partes.push(actual);
+  return partes.join('\r\n ');
+}
+function calendarioIcs() {
+  const sello = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+  return [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//DOTANOVA NEOTEK//Invitacion cena 2026//ES',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'BEGIN:VTIMEZONE',
+    'TZID:America/Bogota',
+    'BEGIN:STANDARD',
+    'DTSTART:19700101T000000',
+    'TZOFFSETFROM:-0500',
+    'TZOFFSETTO:-0500',
+    'TZNAME:-05',
+    'END:STANDARD',
+    'END:VTIMEZONE',
+    'BEGIN:VEVENT',
+    `UID:${EVENTO.uid}`,
+    `DTSTAMP:${sello}`,
+    `DTSTART;TZID=America/Bogota:${EVENTO.inicio}`,
+    `DTEND;TZID=America/Bogota:${EVENTO.fin}`,
+    `SUMMARY:${icsTexto(EVENTO.resumen)}`,
+    `LOCATION:${icsTexto(EVENTO.lugar)}`,
+    `DESCRIPTION:${icsTexto(EVENTO.descripcion)}`,
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].map(icsLinea).join('\r\n') + '\r\n';
+}
+
 // ---------- rutas ----------
+function tokenValido(url) {
+  const token = url.searchParams.get('token') || '';
+  return token.length === ADMIN_TOKEN.length && crypto.timingSafeEqual(Buffer.from(token), Buffer.from(ADMIN_TOKEN));
+}
+
+const EXPORTACIONES = {
+  '/api/confirmaciones.csv': { archivo: 'confirmaciones', filas: agruparRespuestas, columnas: [...COLUMNAS, 'respuestas_mismo_id'] },
+  // auditoría: todas las filas, sin agrupar y con los ids de prueba
+  '/api/confirmaciones-todas.csv': { archivo: 'confirmaciones-todas', filas: (todas) => todas, columnas: COLUMNAS },
+};
+
 async function handleApi(req, res, url) {
   if (url.pathname === '/api/confirmaciones' && req.method === 'POST') {
-    if (rateLimited(clientIp(req))) return sendJson(res, 429, { ok: false, mensaje: 'Recibimos muchos envíos desde esta conexión. Intenta de nuevo en unos minutos.' });
+    if (rateLimited(clientIp(req))) return sendJson(res, 429, { ok: false, mensaje: 'Se recibieron demasiados envíos desde esta conexión. En unos minutos se puede intentar de nuevo.' });
     let body;
-    try { body = JSON.parse(await readBody(req)); } catch { return sendJson(res, 400, { ok: false, mensaje: 'No pudimos leer el formulario. Recarga la página e intenta de nuevo.' }); }
-    if (body.sitio) return sendJson(res, 200, { ok: true }); // trampa para bots
+    try { body = JSON.parse(await readBody(req)); } catch { body = null; }
+    if (!body || typeof body !== 'object') return sendJson(res, 400, { ok: false, mensaje: 'No se pudo leer el formulario. Hay que recargar la página e intentar de nuevo.' });
     const { datos, errores } = validar(body);
+    // Sin tipo de respuesta: es una versión vieja de la página guardada en el navegador.
+    if (!datos.respuesta) return sendJson(res, 400, { ok: false, mensaje: 'La página se actualizó. Hay que recargarla e intentar de nuevo.' });
     if (Object.keys(errores).length) return sendJson(res, 422, { ok: false, errores });
     const registro = {
       id: crypto.randomUUID(),
       fecha: new Date().toISOString(),
       ...datos,
-      autorizacion_texto: clean(body.autorizacionVersion, 40) || 'v1',
+      autorizacion_texto: AUTORIZACION[datos.respuesta],
+      // Trampa para bots: no se descarta, porque el autocompletado puede llenarla a una persona real.
+      posible_spam: clean(body.sitio) ? 'Sí' : 'No',
     };
     await fsp.appendFile(DATA_FILE, JSON.stringify(registro) + '\n', 'utf8');
     return sendJson(res, 201, { ok: true, nombre: datos.nombre.split(' ')[0] });
   }
 
-  if (url.pathname === '/api/confirmaciones.csv' && req.method === 'GET') {
+  const exportacion = EXPORTACIONES[url.pathname];
+  if (exportacion && req.method === 'GET') {
     if (!ADMIN_TOKEN) return send(res, 404, 'No encontrado');
-    const token = url.searchParams.get('token') || '';
-    const ok = token.length === ADMIN_TOKEN.length && crypto.timingSafeEqual(Buffer.from(token), Buffer.from(ADMIN_TOKEN));
-    if (!ok) return send(res, 401, 'Token inválido');
-    const filas = await leerConfirmaciones();
-    const cols = ['fecha', 'nombre', 'empresa', 'cargo', 'celular', 'correo', 'alergia', 'acepta', 'autorizacion_texto'];
-    const csv = '\uFEFF' + [cols.join(';'), ...filas.map((f) => cols.map((c) => csvCell(f[c])).join(';'))].join('\r\n');
+    if (!tokenValido(url)) return send(res, 401, 'Token inválido');
+    const filas = exportacion.filas(await leerRespuestas());
+    const { columnas } = exportacion;
+    const csv = '\uFEFF' + [columnas.join(';'), ...filas.map((f) => columnas.map((c) => csvCell(f[c])).join(';'))].join('\r\n');
     return send(res, 200, csv, {
       'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="confirmaciones-${new Date().toISOString().slice(0, 10)}.csv"`,
+      'Content-Disposition': `attachment; filename="${exportacion.archivo}-${new Date().toISOString().slice(0, 10)}.csv"`,
       'Cache-Control': 'no-store',
     });
   }
 
   return sendJson(res, 404, { ok: false, mensaje: 'Ruta no encontrada' });
+}
+
+// ---------- dos versiones de la invitación ----------
+// ?p=actuales → Actual; ?p=potenciales, sin parámetro o cualquier otro valor → Potencial.
+const TITULO_CENA = 'Cena privada Dotanova × Neotek · Cartagena, 24 de noviembre de 2026';
+const VERSIONES = {
+  Actual: {
+    parametro: 'actuales',
+    imagen: '/assets/og-invitacion.jpg', // IMAGEN PENDIENTE: og-actuales-v2.jpg
+    textoCentral: 'La manera en que las empresas visten y protegen a su gente está cambiando, y queremos hablar de ese cambio con quienes han estado a nuestro lado. Por eso, nos encantaría que nos acompañaran a una cena privada para conversar, entre aliados, sobre lo que viene.',
+    cierre: 'Queremos que esta conversación sea con ustedes.',
+    evento: 'Cartagena, 24 de noviembre de 2026.',
+  },
+  Potencial: {
+    parametro: 'potenciales',
+    imagen: '/assets/og-invitacion.jpg', // IMAGEN PENDIENTE: og-potenciales-v2.jpg
+    textoCentral: 'Dotanova y Neotek los invitan a una cena privada en Cartagena para líderes que deciden cómo se ven, se protegen y trabajan sus equipos: los mismos equipos que construyen el país. Por ellos, este año nos sumamos a una iniciativa de la Fundación CCI para apoyar a los futuros líderes de Colombia.',
+    cierre: 'Nos gustaría contar con ustedes en esa mesa.',
+    evento: 'SAVE THE DATE · Cartagena, 24 de noviembre de 2026.',
+  },
+};
+function escaparHtml(v) {
+  return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function renderIndex(plantilla, req, url) {
+  const version = url.searchParams.get('p') === 'actuales' ? 'Actual' : 'Potencial';
+  const v = VERSIONES[version];
+  const valores = {
+    VERSION: version,
+    TITULO: TITULO_CENA,
+    DESCRIPCION: v.cierre,
+    OG_IMAGEN: v.imagen,
+    PARAMETRO: v.parametro,
+    TEXTO_CENTRAL: v.textoCentral,
+    CIERRE: v.cierre,
+    EVENTO: v.evento,
+    URL_BASE: baseUrl(req),
+  };
+  return plantilla.replace(/\{\{([A-Z_]+)\}\}/g, (marca, clave) => (clave in valores ? escaparHtml(valores[clave]) : marca));
 }
 
 let indexTemplate = null;
@@ -180,8 +363,7 @@ async function serveStatic(req, res, url) {
 
   if (rel === '/index.html') {
     if (!indexTemplate || process.env.NODE_ENV !== 'production') indexTemplate = await fsp.readFile(file, 'utf8');
-    const html = indexTemplate.replaceAll('{{URL_BASE}}', baseUrl(req));
-    return send(res, 200, html, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-cache' });
+    return send(res, 200, renderIndex(indexTemplate, req, url), { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-cache' });
   }
 
   try {
@@ -216,12 +398,19 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
     if (url.pathname === '/salud') return send(res, 200, 'ok', { 'Content-Type': 'text/plain' });
+    if (url.pathname === '/cena.ics' && (req.method === 'GET' || req.method === 'HEAD')) {
+      return send(res, 200, req.method === 'HEAD' ? null : calendarioIcs(), {
+        'Content-Type': 'text/calendar; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="cena-dotanova-neotek.ics"',
+        'Cache-Control': 'no-cache',
+      });
+    }
     if (url.pathname.startsWith('/api/')) return await handleApi(req, res, url);
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'Método no permitido');
     return await serveStatic(req, res, url);
   } catch (err) {
     console.error(err);
-    if (!res.headersSent) sendJson(res, 500, { ok: false, mensaje: 'Error en el servidor. Intenta de nuevo.' });
+    if (!res.headersSent) sendJson(res, 500, { ok: false, mensaje: 'Hubo un error en el servidor. Se puede intentar de nuevo en un momento.' });
   }
 });
 

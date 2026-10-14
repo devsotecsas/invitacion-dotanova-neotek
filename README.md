@@ -29,12 +29,17 @@ Las confirmaciones quedan en `data/confirmaciones.jsonl`.
 5. *Settings → Networking → Generate Domain* (o conecta un dominio propio).
 6. Healthcheck opcional: ruta `/salud`.
 
-## Descargar las confirmaciones
+## Descargar las respuestas
 `https://TU-DOMINIO/api/confirmaciones.csv?token=TU_ADMIN_TOKEN`
-CSV separado por `;` con BOM, abre directo en Excel. Si una persona confirma dos veces con el mismo correo, queda el registro más reciente.
+CSV separado por `;` con BOM, abre directo en Excel. Respuestas "Confirmado" y "Declinó". Si alguien responde varias veces queda la más reciente: por `id_invitado`, si no hay id por correo, y si no hay ninguno (declinaciones sin id) se conservan todas las filas.
+
+Auditoría, todas las filas sin agrupar: `https://TU-DOMINIO/api/confirmaciones-todas.csv?token=TU_ADMIN_TOKEN`
 
 ## Enlaces útiles
-- Enlace directo al formulario, sin portada: `https://TU-DOMINIO/#confirmar`
+- Versión para clientes actuales: `https://TU-DOMINIO/?p=actuales`; para potenciales: `?p=potenciales` (también sin parámetro o con cualquier otro valor).
+- Identificador del invitado (opcional, letras, números y guiones, máx. 20): `&id=A-001`. Se guarda con la respuesta.
+- Enlaces directos sin portada: `#confirmar` (reservar) y `#declinar` (no podré asistir), ej. `?p=actuales&id=A-001#confirmar`.
+- Archivo de calendario: `https://TU-DOMINIO/cena.ics` (hora en `server.js`, busca "HORAS PENDIENTES").
 - La vista previa en WhatsApp usa `public/assets/og-invitacion.jpg` y el dominio real automáticamente.
 
 ## Antes de enviar la invitación

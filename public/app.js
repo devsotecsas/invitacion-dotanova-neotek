@@ -66,15 +66,18 @@
     salir();
   }
 
-  // Enlace directo al formulario (ej. https://.../#confirmar): sin portada.
-  if (location.hash === '#confirmar') {
+  // Enlaces directos a los formularios (ej. https://.../?p=actuales&id=A-001#confirmar
+  // o #declinar): sin portada.
+  const modoDirecto = { '#confirmar': 'reserva', '#declinar': 'declina' }[location.hash];
+  if (modoDirecto) {
     portada.remove();
     body.classList.remove('bloqueado');
     document.querySelector('.fondo').classList.add('directo');
     body.classList.add('listo');
-    // Lo que usa variables declaradas más abajo (fondo, textura) va dentro del rAF:
+    // Lo que usa variables declaradas más abajo (fondo, textura, formularios) va dentro del rAF:
     // llamarlo aquí lanza un ReferenceError y deja el formulario sin su manejador de envío.
     requestAnimationFrame(() => {
+      mostrarFormulario(modoDirecto);
       pedirTextura();
       // salto directo (sin el scroll suave del CSS) para abrir con el fondo en su estado final
       const html = document.documentElement;
@@ -168,119 +171,258 @@
   });
 
   // ------------------------------------------------------------
-  // 4. Botón "Confirma tu asistencia" → formulario
+  // 4. Botones de la invitación → formulario de reserva o de declinación
+  //    (con el mismo descenso); "Volver a la invitación" sube de nuevo.
   // ------------------------------------------------------------
-  document.getElementById('ir-a-confirmar').addEventListener('click', (e) => {
-    e.preventDefault();
+  const formReserva = document.getElementById('form-reserva');
+  const formDeclina = document.getElementById('form-declina');
+  const panelRespuesta = document.getElementById('respuesta');
+  const tituloSeccion = document.getElementById('titulo-confirmar');
+
+  // La versión la pone el servidor en <body>; el id del invitado viene en la URL (&id=XXX).
+  const VERSION = body.dataset.version === 'Actual' ? 'Actual' : 'Potencial';
+  const ID_INVITADO = (() => {
+    const id = new URLSearchParams(location.search).get('id') || '';
+    return /^[A-Za-z0-9-]{1,20}$/.test(id) ? id : '';
+  })();
+
+  function mostrarFormulario(modo) {
+    if (!panelRespuesta.hidden) {
+      // Ya respondió: al volver a elegir, empieza con el formulario limpio.
+      panelRespuesta.hidden = true;
+      [formReserva, formDeclina].forEach((f) => { f.reset(); limpiarErrores(f); });
+      actualizarAcompanante();
+    }
+    formReserva.hidden = modo === 'declina';
+    formDeclina.hidden = modo !== 'declina';
+    tituloSeccion.textContent = modo === 'declina' ? 'No podré asistir' : 'Reservar mi lugar';
+    return modo === 'declina' ? formDeclina : formReserva;
+  }
+
+  function irAFormulario(modo) {
+    const form = mostrarFormulario(modo);
     pedirTextura();
     seccionConfirmar.scrollIntoView({ behavior: reducido ? 'auto' : 'smooth', block: 'start' });
-    window.setTimeout(() => document.getElementById('nombre').focus({ preventScroll: true }), reducido ? 0 : 700);
+    window.setTimeout(() => form.querySelector('input').focus({ preventScroll: true }), reducido ? 0 : 700);
+  }
+
+  document.getElementById('ir-a-confirmar').addEventListener('click', (e) => { e.preventDefault(); irAFormulario('reserva'); });
+  document.getElementById('ir-a-declinar').addEventListener('click', (e) => { e.preventDefault(); irAFormulario('declina'); });
+
+  document.querySelectorAll('.volver').forEach((enlace) => {
+    enlace.addEventListener('click', (e) => {
+      e.preventDefault();
+      window.scrollTo({ top: 0, behavior: reducido ? 'auto' : 'smooth' });
+      document.getElementById('titulo-invitacion').focus({ preventScroll: true });
+    });
   });
 
   // ------------------------------------------------------------
-  // 5. Formulario
+  // 5. Formularios
   // ------------------------------------------------------------
-  const form = document.getElementById('formulario');
-  const enviar = document.getElementById('enviar');
-  const estado = document.getElementById('estado');
-  const CAMPOS = ['nombre', 'empresa', 'cargo', 'celular', 'correo'];
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  const texto = (form, nombre) => (form.elements[nombre] ? form.elements[nombre].value.trim() : '');
 
-  function validarLocal(d) {
-    const e = {};
-    if (d.nombre.length < 3) e.nombre = 'Escribe tu nombre completo.';
-    if (d.empresa.length < 2) e.empresa = 'Escribe el nombre de tu empresa.';
-    if (d.cargo.length < 2) e.cargo = 'Escribe tu cargo.';
-    const dig = d.celular.replace(/\D/g, '');
-    if (dig.length < 7 || dig.length > 15) e.celular = 'Escribe un número de celular válido.';
-    if (!EMAIL_RE.test(d.correo)) e.correo = 'Escribe un correo válido, ej. nombre@empresa.com.';
-    if (!d.acepta) e.acepta = 'Necesitamos tu autorización para registrar tu asistencia.';
-    return e;
+  function personasElegidas() {
+    const elegido = formReserva.querySelector('input[name="personas"]:checked');
+    return elegido ? Number(elegido.value) : 0;
   }
 
-  function pintarErrores(errores) {
+  // Los campos del acompañante solo existen si elige "Asistiré con un acompañante";
+  // si vuelve a "solo" se ocultan, se desactivan y se vacían.
+  function actualizarAcompanante() {
+    const con = personasElegidas() === 2;
+    formReserva.querySelectorAll('[data-acompanante]').forEach((campo) => {
+      campo.hidden = !con;
+      campo.querySelectorAll('input').forEach((input) => {
+        input.disabled = !con;
+        if (!con) input.value = '';
+      });
+      if (!con) limpiarErrores(campo);
+    });
+  }
+
+  const FORMULARIOS = {
+    reserva: {
+      form: formReserva,
+      prefijo: '',
+      campos: ['nombre', 'empresa', 'cargo', 'celular', 'correo', 'personas', 'acompanante_nombre', 'acompanante_cargo_empresa', 'acepta'],
+      textoBoton: 'Confirmar asistencia',
+      datos() {
+        const f = formReserva;
+        const personas = personasElegidas();
+        const con = personas === 2;
+        return {
+          respuesta: 'Confirmado',
+          version: VERSION,
+          id_invitado: ID_INVITADO,
+          nombre: texto(f, 'nombre'),
+          empresa: texto(f, 'empresa'),
+          cargo: texto(f, 'cargo'),
+          celular: texto(f, 'celular'),
+          correo: texto(f, 'correo'),
+          personas: personas || null,
+          acompanante_nombre: con ? texto(f, 'acompanante_nombre') : '',
+          acompanante_cargo_empresa: con ? texto(f, 'acompanante_cargo_empresa') : '',
+          acompanante_alergia: con ? texto(f, 'acompanante_alergia') : '', // opcional
+          alergia: texto(f, 'alergia'), // opcional
+          acepta: f.elements.acepta.checked,
+          sitio: f.elements.sitio.value,
+          autorizacionVersion: 'v3-reserva-2026-10',
+        };
+      },
+      validar(d) {
+        const e = {};
+        if (d.nombre.length < 3) e.nombre = 'Falta el nombre completo.';
+        if (d.empresa.length < 2) e.empresa = 'Falta el nombre de la empresa.';
+        if (d.cargo.length < 2) e.cargo = 'Falta el cargo.';
+        const dig = d.celular.replace(/\D/g, '');
+        if (dig.length < 7 || dig.length > 15) e.celular = 'El número de celular no es válido.';
+        if (!EMAIL_RE.test(d.correo)) e.correo = 'El correo no es válido. Ejemplo: nombre@empresa.com';
+        if (d.personas !== 1 && d.personas !== 2) e.personas = 'Falta elegir: asistir solo o con un acompañante.';
+        if (d.personas === 2 && d.acompanante_nombre.length < 3) e.acompanante_nombre = 'Falta el nombre completo del acompañante.';
+        if (d.personas === 2 && d.acompanante_cargo_empresa.length < 2) e.acompanante_cargo_empresa = 'Faltan el cargo y la empresa del acompañante.';
+        if (!d.acepta) e.acepta = 'Falta la autorización de tratamiento de datos.';
+        return e;
+      },
+    },
+    declina: {
+      form: formDeclina,
+      prefijo: 'd-',
+      campos: ['nombre', 'empresa', 'acepta'],
+      textoBoton: 'Enviar respuesta',
+      datos() {
+        const f = formDeclina;
+        return {
+          respuesta: 'Declinó',
+          version: VERSION,
+          id_invitado: ID_INVITADO,
+          nombre: texto(f, 'nombre'),
+          empresa: texto(f, 'empresa'),
+          coordinar: f.elements.coordinar.checked,
+          acepta: f.elements.acepta.checked,
+          sitio: f.elements.sitio.value,
+          autorizacionVersion: 'v1-declina-2026-10',
+        };
+      },
+      validar(d) {
+        const e = {};
+        if (d.nombre.length < 3) e.nombre = 'Falta el nombre completo.';
+        if (d.empresa.length < 2) e.empresa = 'Falta el nombre de la empresa.';
+        if (!d.acepta) e.acepta = 'Falta la autorización de tratamiento de datos.';
+        return e;
+      },
+    },
+  };
+
+  function marcarCampo(elemento, error, msg) {
+    error.textContent = msg;
+    elemento.setAttribute('aria-invalid', msg ? 'true' : 'false');
+    if (elemento.matches('input:not([type="checkbox"])') || elemento.matches('[role="radiogroup"]')) {
+      if (msg) elemento.setAttribute('aria-describedby', error.id);
+      else if (elemento.getAttribute('aria-describedby') === error.id) elemento.removeAttribute('aria-describedby');
+    }
+    elemento.closest('.campo')?.classList.toggle('invalido', Boolean(msg));
+  }
+
+  function pintarErrores(conf, errores) {
     let primero = null;
-    [...CAMPOS, 'acepta'].forEach((c) => {
+    conf.campos.forEach((c) => {
+      const elemento = document.getElementById(conf.prefijo + c);
+      const error = document.getElementById('error-' + conf.prefijo + c);
+      if (!elemento || !error) return;
       const msg = errores[c] || '';
-      document.getElementById('error-' + c).textContent = msg;
-      const input = document.getElementById(c);
-      input.setAttribute('aria-invalid', msg ? 'true' : 'false');
-      if (msg) input.setAttribute('aria-describedby', 'error-' + c);
-      else input.removeAttribute('aria-describedby');
-      const campo = input.closest('.campo');
-      if (campo) campo.classList.toggle('invalido', Boolean(msg));
-      if (msg && !primero) primero = input;
+      marcarCampo(elemento, error, msg);
+      if (msg && !primero) primero = elemento.matches('input') ? elemento : elemento.querySelector('input');
     });
     return primero;
   }
 
-  // Limpia el error de un campo apenas la persona lo corrige
-  form.addEventListener('input', (e) => {
-    const id = e.target.id;
-    if (![...CAMPOS, 'acepta'].includes(id)) return;
-    const err = document.getElementById('error-' + id);
-    if (err && err.textContent) {
-      err.textContent = '';
-      e.target.setAttribute('aria-invalid', 'false');
-      e.target.closest('.campo')?.classList.remove('invalido');
+  function limpiarErrores(contenedor) {
+    contenedor.querySelectorAll('.campo-error').forEach((error) => {
+      const elemento = document.getElementById(error.id.replace(/^error-/, ''));
+      if (elemento) marcarCampo(elemento, error, '');
+      else error.textContent = '';
+    });
+  }
+
+  function mostrarRespuesta(modo, d, nombreServidor) {
+    const nombre = nombreServidor || d.nombre.split(' ')[0];
+    const titulo = document.getElementById('gracias-titulo');
+    const textoRespuesta = document.getElementById('gracias-texto');
+    const calendario = document.getElementById('calendario');
+    // textContent: los nombres nunca se insertan como HTML
+    if (modo === 'declina') {
+      titulo.textContent = `Gracias por avisarnos, ${nombre}.`;
+      textoRespuesta.textContent = 'Lamentamos no coincidir esta vez. Seguiremos en contacto, y esperamos encontrarnos pronto.';
+      calendario.hidden = true;
+    } else if (d.personas === 2) {
+      titulo.textContent = `Gracias, ${nombre}. Quedaron reservados dos lugares.`;
+      textoRespuesta.textContent = `Uno de ellos a nombre de ${d.acompanante_nombre}. Muy pronto enviaremos por correo la hora, el lugar y los detalles de la noche.`;
+      calendario.hidden = false;
+    } else {
+      titulo.textContent = `Gracias, ${nombre}. El lugar quedó reservado.`;
+      textoRespuesta.textContent = 'Nos vemos en Cartagena el 24 de noviembre. Muy pronto enviaremos por correo la hora, el lugar y los detalles de la noche.';
+      calendario.hidden = false;
     }
+    formReserva.hidden = true;
+    formDeclina.hidden = true;
+    panelRespuesta.hidden = false;
+    const gracias = document.getElementById('gracias');
+    gracias.focus({ preventScroll: true });
+    gracias.scrollIntoView({ behavior: reducido ? 'auto' : 'smooth', block: 'center' });
+  }
+
+  Object.entries(FORMULARIOS).forEach(([modo, conf]) => {
+    const { form } = conf;
+    const boton = form.querySelector('button[type="submit"]');
+    const estado = form.querySelector('.formulario-estado');
+
+    // Limpia el error de un campo apenas la persona lo corrige
+    form.addEventListener('input', (e) => {
+      const campo = e.target.name === 'personas' ? 'personas' : e.target.id.slice(conf.prefijo.length);
+      if (!conf.campos.includes(campo)) return;
+      const elemento = document.getElementById(conf.prefijo + campo);
+      const error = document.getElementById('error-' + conf.prefijo + campo);
+      if (elemento && error && error.textContent) marcarCampo(elemento, error, '');
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      estado.textContent = '';
+      const datos = conf.datos();
+      const primero = pintarErrores(conf, conf.validar(datos));
+      if (primero) { primero.focus(); return; }
+
+      boton.disabled = true;
+      boton.textContent = 'Enviando…';
+      try {
+        const r = await fetch('/api/confirmaciones', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(datos),
+        });
+        const resp = await r.json().catch(() => ({}));
+        if (r.ok && resp.ok) {
+          mostrarRespuesta(modo, datos, resp.nombre);
+          return;
+        }
+        if (resp.errores) {
+          const p = pintarErrores(conf, resp.errores);
+          if (p) p.focus();
+        } else {
+          estado.textContent = resp.mensaje || 'No se pudo registrar la respuesta. Se puede intentar de nuevo en un momento.';
+        }
+      } catch {
+        estado.textContent = 'No hay conexión con el servidor. Conviene revisar el internet e intentar de nuevo.';
+      } finally {
+        boton.disabled = false;
+        boton.textContent = conf.textoBoton;
+      }
+    });
   });
 
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    estado.textContent = '';
-
-    const datos = {
-      nombre: form.nombre.value.trim(),
-      empresa: form.empresa.value.trim(),
-      cargo: form.cargo.value.trim(),
-      celular: form.celular.value.trim(),
-      correo: form.correo.value.trim(),
-      alergia: form.alergia.value.trim(), // opcional
-      acepta: form.acepta.checked,
-      sitio: form.sitio.value,
-      autorizacionVersion: 'v2-2026-10', // cambió el texto de autorización (alergias)
-    };
-
-    const primero = pintarErrores(validarLocal(datos));
-    if (primero) { primero.focus(); return; }
-
-    enviar.disabled = true;
-    enviar.textContent = 'Enviando…';
-
-    try {
-      const r = await fetch('/api/confirmaciones', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(datos),
-      });
-      const resp = await r.json().catch(() => ({}));
-
-      if (r.ok && resp.ok) {
-        const nombre = resp.nombre || datos.nombre.split(' ')[0];
-        document.getElementById('gracias-titulo').textContent = `¡Te esperamos, ${nombre}!`;
-        document.getElementById('gracias-texto').textContent =
-          `Tu asistencia quedó confirmada. Te enviaremos los detalles completos a ${datos.correo}.`;
-        document.getElementById('campos').hidden = true;
-        const gracias = document.getElementById('gracias');
-        gracias.hidden = false;
-        form.classList.add('enviado');
-        gracias.focus({ preventScroll: true });
-        gracias.scrollIntoView({ behavior: reducido ? 'auto' : 'smooth', block: 'center' });
-        return;
-      }
-
-      if (resp.errores) {
-        const p = pintarErrores(resp.errores);
-        if (p) p.focus();
-      } else {
-        estado.textContent = resp.mensaje || 'No pudimos registrar tu confirmación. Intenta de nuevo en un momento.';
-      }
-    } catch {
-      estado.textContent = 'Sin conexión con el servidor. Revisa tu internet e intenta de nuevo.';
-    } finally {
-      enviar.disabled = false;
-      enviar.textContent = 'Enviar confirmación';
-    }
+  formReserva.addEventListener('change', (e) => {
+    if (e.target.name === 'personas') actualizarAcompanante();
   });
 })();
