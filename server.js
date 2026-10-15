@@ -213,12 +213,17 @@ function csvCell(v) {
 // ---------- calendario ----------
 const EVENTO = {
   uid: 'cena-dotanova-neotek-20261124@invitacion',
-  // HORAS PENDIENTES: confirmar con el cliente (sugeridas 7:00 p. m. a 10:00 p. m., hora de Colombia)
-  inicio: '20261124T190000',
-  fin: '20261124T220000',
+  secuencia: 1, // subirla cada vez que cambie el evento, para que los calendarios lo actualicen
+  dia: '20261124',
+  diaSiguiente: '20261125',
+  // HORAS PENDIENTES: sin hora confirmada el evento es de día completo, para que nadie quede
+  // con una hora equivocada. Al confirmarla: horas en HHMMSS (hora de Colombia), nueva
+  // descripción y secuencia + 1.
+  horaInicio: null,
+  horaFin: null,
   resumen: 'Cena Dotanova × Neotek · Cartagena',
   lugar: 'Cartagena, Colombia',
-  descripcion: 'Hora y lugar por confirmar.',
+  descripcion: 'Hora y lugar por confirmar. Enviaremos los detalles por correo.',
 };
 function icsTexto(v) {
   return String(v).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
@@ -236,12 +241,8 @@ function icsLinea(linea) {
 }
 function calendarioIcs() {
   const sello = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
-  return [
-    'BEGIN:VCALENDAR',
-    'VERSION:2.0',
-    'PRODID:-//DOTANOVA NEOTEK//Invitacion cena 2026//ES',
-    'CALSCALE:GREGORIAN',
-    'METHOD:PUBLISH',
+  const conHora = Boolean(EVENTO.horaInicio && EVENTO.horaFin);
+  const zonaHoraria = conHora ? [
     'BEGIN:VTIMEZONE',
     'TZID:America/Bogota',
     'BEGIN:STANDARD',
@@ -251,11 +252,26 @@ function calendarioIcs() {
     'TZNAME:-05',
     'END:STANDARD',
     'END:VTIMEZONE',
+  ] : [];
+  const fechas = conHora ? [
+    `DTSTART;TZID=America/Bogota:${EVENTO.dia}T${EVENTO.horaInicio}`,
+    `DTEND;TZID=America/Bogota:${EVENTO.dia}T${EVENTO.horaFin}`,
+  ] : [
+    `DTSTART;VALUE=DATE:${EVENTO.dia}`,
+    `DTEND;VALUE=DATE:${EVENTO.diaSiguiente}`, // DTEND es exclusivo: el evento ocupa solo el 24
+  ];
+  return [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//DOTANOVA NEOTEK//Invitacion cena 2026//ES',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    ...zonaHoraria,
     'BEGIN:VEVENT',
     `UID:${EVENTO.uid}`,
+    `SEQUENCE:${EVENTO.secuencia}`,
     `DTSTAMP:${sello}`,
-    `DTSTART;TZID=America/Bogota:${EVENTO.inicio}`,
-    `DTEND;TZID=America/Bogota:${EVENTO.fin}`,
+    ...fechas,
     `SUMMARY:${icsTexto(EVENTO.resumen)}`,
     `LOCATION:${icsTexto(EVENTO.lugar)}`,
     `DESCRIPTION:${icsTexto(EVENTO.descripcion)}`,

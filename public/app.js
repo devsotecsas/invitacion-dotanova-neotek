@@ -221,6 +221,7 @@
   // 5. Formularios
   // ------------------------------------------------------------
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  const TIEMPO_LIMITE_ENVIO = 20000; // ms
   const texto = (form, nombre) => (form.elements[nombre] ? form.elements[nombre].value.trim() : '');
 
   function personasElegidas() {
@@ -396,13 +397,20 @@
 
       boton.disabled = true;
       boton.textContent = 'Enviando…';
+      // Si la conexión se cuelga, a los 20 s se corta para que el botón no quede en "Enviando…".
+      // El servidor pudo haber guardado la respuesta igual; reenviar no duplica en el CSV
+      // agrupado, que se queda con la más reciente por id o correo.
+      const control = new AbortController();
+      const limite = window.setTimeout(() => control.abort(), TIEMPO_LIMITE_ENVIO);
       try {
         const r = await fetch('/api/confirmaciones', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(datos),
+          signal: control.signal,
         });
-        const resp = await r.json().catch(() => ({}));
+        // una respuesta que no es JSON (p. ej. un error del proxy) se trata como fallo del servidor
+        const resp = await r.json().catch((err) => { if (err.name === 'AbortError') throw err; return {}; });
         if (r.ok && resp.ok) {
           mostrarRespuesta(modo, datos, resp.nombre);
           return;
@@ -413,9 +421,12 @@
         } else {
           estado.textContent = resp.mensaje || 'No se pudo registrar la respuesta. Se puede intentar de nuevo en un momento.';
         }
-      } catch {
-        estado.textContent = 'No hay conexión con el servidor. Conviene revisar el internet e intentar de nuevo.';
+      } catch (err) {
+        estado.textContent = err.name === 'AbortError'
+          ? 'La conexión tardó demasiado. Hay que intentar de nuevo.'
+          : 'No hay conexión con el servidor. Conviene revisar el internet e intentar de nuevo.';
       } finally {
+        window.clearTimeout(limite);
         boton.disabled = false;
         boton.textContent = conf.textoBoton;
       }
