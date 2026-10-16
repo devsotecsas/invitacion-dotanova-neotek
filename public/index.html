@@ -15,7 +15,7 @@
   <meta property="og:image" content="{{URL_BASE}}{{OG_IMAGEN}}">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:url" content="{{URL_BASE}}/?p={{PARAMETRO}}">
+  <meta property="og:url" content="{{URL_BASE}}{{RUTA}}">
   <meta name="twitter:card" content="summary_large_image">
 
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -63,7 +63,7 @@
 
       <div class="invitacion-contenido">
         <header class="logos" data-entra style="--i:0">
-          <!-- Si subes los logos oficiales a /assets/logos/dotanova.svg y /assets/logos/neotek.svg
+          <!-- Si subes los logos oficiales a /assets/logos/dotanova.svg y /assets/logos/neotek-recortado.png
                se usan automáticamente en lugar de estas versiones de respaldo. -->
           <div class="logo logo-dotanova" data-logo="/assets/logos/dotanova-claro.svg" role="img" aria-label="DOTANOVA">
             <svg class="logo-dotanova-icono" viewBox="0 0 40 34" aria-hidden="true">
@@ -74,7 +74,7 @@
             </svg>
             <span class="logo-dotanova-texto" aria-hidden="true">DOTANOVA</span>
           </div>
-          <div class="logo logo-neotek" data-logo="/assets/logos/neotek.svg" role="img" aria-label="NEOTEK EPPS">
+          <div class="logo logo-neotek" data-logo="/assets/logos/neotek-recortado.png" role="img" aria-label="NEOTEK EPPS">
             <span class="logo-neotek-texto" aria-hidden="true">NEOTEK</span>
             <span class="logo-neotek-barra" aria-hidden="true"><i></i><i></i><i></i></span>
             <span class="logo-neotek-epps" aria-hidden="true">EPPS</span>
@@ -110,27 +110,27 @@
             <a class="volver campo-ancho" href="#invitacion">Volver a la invitación</a>
             <div class="campo campo-ancho">
               <label for="nombre">Nombre completo</label>
-              <input id="nombre" name="nombre" type="text" autocomplete="name" placeholder="Ej: Isabella Ariza Colmenares" maxlength="120" required>
+              <input id="nombre" name="nombre" type="text" autocomplete="name" placeholder="Ej: Andrés Felipe Rojas Mejía" maxlength="120" required>
               <p class="campo-error" id="error-nombre" aria-live="polite"></p>
             </div>
             <div class="campo">
               <label for="empresa">Empresa</label>
-              <input id="empresa" name="empresa" type="text" autocomplete="organization" placeholder="Ej: Dotaciones Nova SAS" maxlength="120" required>
+              <input id="empresa" name="empresa" type="text" autocomplete="organization" placeholder="Ej: Constructora Horizonte S.A.S." maxlength="120" required>
               <p class="campo-error" id="error-empresa" aria-live="polite"></p>
             </div>
             <div class="campo">
               <label for="cargo">Cargo</label>
-              <input id="cargo" name="cargo" type="text" autocomplete="organization-title" placeholder="Ej: Community Manager" maxlength="120" required>
+              <input id="cargo" name="cargo" type="text" autocomplete="organization-title" placeholder="Ej: Gerente General" maxlength="120" required>
               <p class="campo-error" id="error-cargo" aria-live="polite"></p>
             </div>
             <div class="campo">
               <label for="celular">Celular</label>
-              <input id="celular" name="celular" type="tel" inputmode="tel" autocomplete="tel" placeholder="Ej: 311 5179244" maxlength="30" required>
+              <input id="celular" name="celular" type="tel" inputmode="tel" autocomplete="tel" placeholder="Ej: 310 555 0123" maxlength="30" required>
               <p class="campo-error" id="error-celular" aria-live="polite"></p>
             </div>
             <div class="campo">
               <label for="correo">Correo</label>
-              <input id="correo" name="correo" type="email" inputmode="email" autocomplete="email" placeholder="Ej: cm@correocorporativo.com" maxlength="160" required>
+              <input id="correo" name="correo" type="email" inputmode="email" autocomplete="email" placeholder="Ej: arojas@constructorahorizonte.com.co" maxlength="160" required>
               <p class="campo-error" id="error-correo" aria-live="polite"></p>
             </div>
 
@@ -152,12 +152,12 @@
             <!-- Solo si asiste con acompañante (app.js los muestra, oculta y vacía) -->
             <div class="campo campo-ancho" data-acompanante hidden>
               <label for="acompanante_nombre">Nombre completo del acompañante</label>
-              <input id="acompanante_nombre" name="acompanante_nombre" type="text" autocomplete="off" maxlength="120" disabled>
+              <input id="acompanante_nombre" name="acompanante_nombre" type="text" autocomplete="off" placeholder="Ej: Carolina Vélez Ortiz" maxlength="120" disabled>
               <p class="campo-error" id="error-acompanante_nombre" aria-live="polite"></p>
             </div>
             <div class="campo campo-ancho" data-acompanante hidden>
               <label for="acompanante_cargo_empresa">Cargo y empresa del acompañante</label>
-              <input id="acompanante_cargo_empresa" name="acompanante_cargo_empresa" type="text" autocomplete="off" maxlength="160" disabled>
+              <input id="acompanante_cargo_empresa" name="acompanante_cargo_empresa" type="text" autocomplete="off" placeholder="Ej: Directora de Operaciones, Constructora Horizonte S.A.S." maxlength="160" disabled>
               <p class="campo-error" id="error-acompanante_cargo_empresa" aria-live="polite"></p>
             </div>
             <div class="campo campo-ancho" data-acompanante hidden>
@@ -197,12 +197,12 @@
             <a class="volver campo-ancho" href="#invitacion">Volver a la invitación</a>
             <div class="campo campo-ancho">
               <label for="d-nombre">Nombre completo</label>
-              <input id="d-nombre" name="nombre" type="text" autocomplete="name" placeholder="Ej: Isabella Ariza Colmenares" maxlength="120" required>
+              <input id="d-nombre" name="nombre" type="text" autocomplete="name" placeholder="Ej: Andrés Felipe Rojas Mejía" maxlength="120" required>
               <p class="campo-error" id="error-d-nombre" aria-live="polite"></p>
             </div>
             <div class="campo campo-ancho">
               <label for="d-empresa">Empresa</label>
-              <input id="d-empresa" name="empresa" type="text" autocomplete="organization" placeholder="Ej: Dotaciones Nova SAS" maxlength="120" required>
+              <input id="d-empresa" name="empresa" type="text" autocomplete="organization" placeholder="Ej: Constructora Horizonte S.A.S." maxlength="120" required>
               <p class="campo-error" id="error-d-empresa" aria-live="polite"></p>
             </div>
             <label class="casilla-opcion campo-ancho">
