@@ -332,19 +332,20 @@ async function handleApi(req, res, url) {
 }
 
 // ---------- dos versiones de la invitación ----------
-// La ruta decide la versión: / → Potencial, /DotanovaNeotek → Actual.
-// Los enlaces viejos con ?p= redirigen (301) a la dirección de su versión.
+// La ruta decide la versión: / → Actual, /DotanovaNeotek → Potencial.
+// Los enlaces con ?p= redirigen (302, temporal: los navegadores no la guardan) a la dirección
+// de su versión, conservando el id.
 const TITULO_CENA = 'Cena privada Dotanova × Neotek · Cartagena, 24 de noviembre de 2026';
 const VERSIONES = {
   Actual: {
-    ruta: '/DotanovaNeotek',
+    ruta: '/',
     imagen: '/assets/og-invitacion.jpg', // IMAGEN PENDIENTE: og-actuales-v2.jpg
     textoCentral: 'La manera en que las empresas visten y protegen a su gente está cambiando, y queremos hablar de ese cambio con quienes han estado a nuestro lado. Por eso, nos encantaría que nos acompañaran a una cena privada para conversar, entre aliados, sobre lo que viene.',
     cierre: 'Queremos que esta conversación sea con ustedes.',
     evento: 'Cartagena, 24 de noviembre de 2026.',
   },
   Potencial: {
-    ruta: '/',
+    ruta: '/DotanovaNeotek',
     imagen: '/assets/og-invitacion.jpg', // IMAGEN PENDIENTE: og-potenciales-v2.jpg
     textoCentral: 'Dotanova y Neotek los invitan a una cena privada en Cartagena para líderes que deciden cómo se ven, se protegen y trabajan sus equipos: los mismos equipos que construyen el país. Por ellos, este año nos sumamos a una iniciativa de la Fundación CCI para apoyar a los futuros líderes de Colombia.',
     cierre: 'Nos gustaría contar con ustedes en esa mesa.',
@@ -354,23 +355,25 @@ const VERSIONES = {
 function escaparHtml(v) {
   return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
-const RUTA_ACTUAL = '/DotanovaNeotek';
+const RUTA_POTENCIAL = VERSIONES.Potencial.ruta;
 const ID_VALIDO = /^[A-Za-z0-9-]{1,20}$/;
-// Devuelve la dirección a la que hay que redirigir (301) o null si la URL ya es la limpia.
+// Devuelve la dirección a la que hay que redirigir (302) o null si la URL ya es la limpia.
+// ?p=potenciales → /DotanovaNeotek; ?p=actuales o cualquier otro valor → /.
+// Las variantes de mayúsculas y la barra final de /DotanovaNeotek van a la dirección exacta.
 function redireccionVersion(url) {
   const ruta = url.pathname;
-  const esActual = ruta.toLowerCase().replace(/\/+$/, '') === RUTA_ACTUAL.toLowerCase();
+  const esPotencial = ruta.toLowerCase().replace(/\/+$/, '') === RUTA_POTENCIAL.toLowerCase();
   const p = url.searchParams.get('p');
-  if (!esActual && ruta !== '/' && ruta !== '/index.html') return null;
-  if (p === null && (ruta === '/' || ruta === RUTA_ACTUAL)) return null;
-  let destino = esActual ? RUTA_ACTUAL : '/';
-  if (p !== null) destino = p === 'actuales' ? RUTA_ACTUAL : '/';
+  if (!esPotencial && ruta !== '/' && ruta !== '/index.html') return null;
+  if (p === null && (ruta === '/' || ruta === RUTA_POTENCIAL)) return null;
+  let destino = esPotencial ? RUTA_POTENCIAL : '/';
+  if (p !== null) destino = p === 'potenciales' ? RUTA_POTENCIAL : '/';
   else if (ruta === '/index.html') destino = '/';
   const id = url.searchParams.get('id');
   return destino + (id !== null && ID_VALIDO.test(id) ? `?id=${id}` : '');
 }
 function renderIndex(plantilla, req, url) {
-  const version = url.pathname === RUTA_ACTUAL ? 'Actual' : 'Potencial';
+  const version = url.pathname === RUTA_POTENCIAL ? 'Potencial' : 'Actual';
   const v = VERSIONES[version];
   const valores = {
     VERSION: version,
@@ -389,7 +392,7 @@ function renderIndex(plantilla, req, url) {
 let indexTemplate = null;
 async function serveStatic(req, res, url) {
   let rel = decodeURIComponent(url.pathname);
-  if (rel === '/' || rel === '' || rel === RUTA_ACTUAL) rel = '/index.html';
+  if (rel === '/' || rel === '' || rel === RUTA_POTENCIAL) rel = '/index.html';
   const file = path.normalize(path.join(PUBLIC_DIR, rel));
   if (!file.startsWith(PUBLIC_DIR + path.sep)) return send(res, 403, 'Prohibido');
 
@@ -440,7 +443,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname.startsWith('/api/')) return await handleApi(req, res, url);
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'Método no permitido');
     const destino = redireccionVersion(url);
-    if (destino) return send(res, 301, null, { Location: destino, 'Cache-Control': 'no-cache' });
+    if (destino) return send(res, 302, null, { Location: destino, 'Cache-Control': 'no-cache' });
     return await serveStatic(req, res, url);
   } catch (err) {
     console.error(err);

@@ -66,7 +66,7 @@
     salir();
   }
 
-  // Enlaces directos a los formularios (ej. https://.../DotanovaNeotek?id=A-001#confirmar
+  // Enlaces directos a los formularios (ej. https://.../?id=A-001#confirmar
   // o #declinar): sin portada.
   const modoDirecto = { '#confirmar': 'reserva', '#declinar': 'declina' }[location.hash];
   if (modoDirecto) {

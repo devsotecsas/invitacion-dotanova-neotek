@@ -36,9 +36,9 @@ CSV separado por `;` con BOM, abre directo en Excel. Respuestas "Confirmado" y "
 Auditoría, todas las filas sin agrupar: `https://TU-DOMINIO/api/confirmaciones-todas.csv?token=TU_ADMIN_TOKEN`
 
 ## Enlaces útiles
-- Versión para potenciales: `https://TU-DOMINIO/`; para clientes actuales: `https://TU-DOMINIO/DotanovaNeotek` (sin importar mayúsculas ni barra final; las variantes redirigen con 301). Los enlaces viejos con `?p=actuales` / `?p=potenciales` también redirigen con 301, conservando el `id`.
+- Versión para clientes actuales: `https://TU-DOMINIO/`; para potenciales: `https://TU-DOMINIO/DotanovaNeotek` (sin importar mayúsculas ni barra final; las variantes redirigen con 302). Los enlaces con `?p=actuales` / `?p=potenciales` también redirigen con 302 (temporal, los navegadores no la guardan), conservando el `id`; un valor desconocido de `p` va a la raíz.
 - Identificador del invitado (opcional, letras, números y guiones, máx. 20): `&id=A-001`. Se guarda con la respuesta.
-- Enlaces directos sin portada: `#confirmar` (reservar) y `#declinar` (no podré asistir), ej. `/DotanovaNeotek?id=A-001#confirmar`.
+- Enlaces directos sin portada: `#confirmar` (reservar) y `#declinar` (no podré asistir), ej. `/?id=A-001#confirmar` o `/DotanovaNeotek?id=B-002#declinar`.
 - Archivo de calendario: `https://TU-DOMINIO/cena.ics` (hora en `server.js`, busca "HORAS PENDIENTES").
 - La vista previa en WhatsApp usa `public/assets/og-invitacion.jpg` y el dominio real automáticamente.
 
