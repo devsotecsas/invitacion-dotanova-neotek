@@ -6,8 +6,9 @@
  *   PORT         Lo pone Railway solo.
  *   DATA_DIR     Carpeta donde se guardan las confirmaciones. En Railway debe
  *                apuntar a un Volume (ej. /data); si no, se pierden en cada deploy.
- *   ADMIN_TOKEN  Clave para descargar el CSV en /api/confirmaciones.csv?token=...
- *                Si no está definida, la descarga queda deshabilitada.
+ *   ADMIN_TOKEN  Clave del panel privado (/panel) y para descargar el CSV en
+ *                /api/confirmaciones.csv?token=... Si no está definida, el panel y la
+ *                descarga quedan deshabilitados. Al cambiarla, las sesiones del panel caducan.
  */
 const http = require('http');
 const fs = require('fs');
@@ -17,6 +18,7 @@ const crypto = require('crypto');
 
 const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
+const PANEL_DIR = path.join(__dirname, 'panel'); // fuera de public/: nunca se sirve como estático
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'confirmaciones.jsonl');
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
@@ -73,21 +75,26 @@ function readBody(req, limit = 10 * 1024) {
   });
 }
 
-// Límite simple de envíos por IP (en memoria): 30 cada 10 minutos.
-// Holgado porque los operadores móviles comparten una IP entre muchas personas.
-const hits = new Map();
-function rateLimited(ip) {
-  const now = Date.now();
-  const windowMs = 10 * 60 * 1000;
-  const list = (hits.get(ip) || []).filter((t) => now - t < windowMs);
-  list.push(now);
-  hits.set(ip, list);
-  return list.length > 30;
+// Límite simple por IP (en memoria): máximo `max` peticiones en la ventana.
+function crearLimite(max, ventanaMs = 10 * 60 * 1000) {
+  const hits = new Map();
+  setInterval(() => {
+    const now = Date.now();
+    for (const [ip, list] of hits) if (list.every((t) => now - t > ventanaMs)) hits.delete(ip);
+  }, 5 * 60 * 1000).unref();
+  return (ip) => {
+    const now = Date.now();
+    const list = (hits.get(ip) || []).filter((t) => now - t < ventanaMs);
+    list.push(now);
+    hits.set(ip, list);
+    return list.length > max;
+  };
 }
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, list] of hits) if (list.every((t) => now - t > 10 * 60 * 1000)) hits.delete(ip);
-}, 5 * 60 * 1000).unref();
+// Envíos del formulario: 30 cada 10 minutos, holgado porque los operadores móviles
+// comparten una IP entre muchas personas.
+const rateLimited = crearLimite(30);
+// Intentos de acceso al panel: 5 cada 10 minutos (cuentan todos, también los correctos).
+const accesoPanelLimitado = crearLimite(5);
 
 // ---------- validación ----------
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -189,8 +196,9 @@ const esPrueba = (r) => /^PRUEBA-/i.test(r.id_invitado);
 // Si alguien responde varias veces queda la respuesta más reciente: por id de invitado,
 // si no hay id por correo, y si no hay ninguno (declinaciones sin id) se conservan todas.
 // respuestas_mismo_id cuenta las respuestas de ese id (más de una puede ser un enlace reenviado).
-function agruparRespuestas(todas) {
-  const filas = todas.filter((r) => !esPrueba(r));
+// El CSV excluye siempre los ids de prueba; el panel puede incluirlos con incluirPruebas.
+function agruparRespuestas(todas, { incluirPruebas = false } = {}) {
+  const filas = incluirPruebas ? todas : todas.filter((r) => !esPrueba(r));
   const porId = new Map();
   filas.forEach((r) => { if (r.id_invitado) porId.set(r.id_invitado, (porId.get(r.id_invitado) || 0) + 1); });
   const ultimas = new Map();
@@ -287,7 +295,7 @@ function tokenValido(url) {
 }
 
 const EXPORTACIONES = {
-  '/api/confirmaciones.csv': { archivo: 'confirmaciones', filas: agruparRespuestas, columnas: [...COLUMNAS, 'respuestas_mismo_id'] },
+  '/api/confirmaciones.csv': { archivo: 'confirmaciones', filas: (todas) => agruparRespuestas(todas), columnas: [...COLUMNAS, 'respuestas_mismo_id'] },
   // auditoría: todas las filas, sin agrupar y con los ids de prueba
   '/api/confirmaciones-todas.csv': { archivo: 'confirmaciones-todas', filas: (todas) => todas, columnas: COLUMNAS },
 };
@@ -317,18 +325,131 @@ async function handleApi(req, res, url) {
   const exportacion = EXPORTACIONES[url.pathname];
   if (exportacion && req.method === 'GET') {
     if (!ADMIN_TOKEN) return send(res, 404, 'No encontrado');
-    if (!tokenValido(url)) return send(res, 401, 'Token inválido');
+    // ?token= se mantiene por compatibilidad; desde el panel basta la sesión.
+    if (!tokenValido(url) && !sesionValida(req)) return send(res, 401, 'Token inválido', CABECERAS_PRIVADAS);
     const filas = exportacion.filas(await leerRespuestas());
     const { columnas } = exportacion;
     const csv = '\uFEFF' + [columnas.join(';'), ...filas.map((f) => columnas.map((c) => csvCell(f[c])).join(';'))].join('\r\n');
     return send(res, 200, csv, {
       'Content-Type': 'text/csv; charset=utf-8',
       'Content-Disposition': `attachment; filename="${exportacion.archivo}-${new Date().toISOString().slice(0, 10)}.csv"`,
-      'Cache-Control': 'no-store',
+      ...CABECERAS_PRIVADAS,
     });
   }
 
+  if (url.pathname === '/api/panel/datos' && req.method === 'GET') {
+    if (!ADMIN_TOKEN) return jsonPrivado(res, 404, { ok: false, mensaje: 'Ruta no encontrada' });
+    if (!sesionValida(req)) return jsonPrivado(res, 401, { ok: false, mensaje: 'Hace falta iniciar sesión.' });
+    const incluirPruebas = url.searchParams.get('pruebas') === '1';
+    const todas = await leerRespuestas();
+    const soloColumnas = (r, columnas) => Object.fromEntries(columnas.map((c) => [c, r[c] ?? '']));
+    const datos = {
+      ok: true,
+      generado: new Date().toISOString(),
+      incluyePruebas: incluirPruebas,
+      agrupadas: agruparRespuestas(todas, { incluirPruebas }).map((r) => soloColumnas(r, [...COLUMNAS, 'respuestas_mismo_id'])),
+      auditoria: (incluirPruebas ? todas : todas.filter((r) => !esPrueba(r))).map((r) => soloColumnas(r, COLUMNAS)),
+    };
+    return jsonPrivado(res, 200, datos);
+  }
+
   return sendJson(res, 404, { ok: false, mensaje: 'Ruta no encontrada' });
+}
+
+// ---------- panel privado (/panel) ----------
+// Respuestas del panel y de su API: nunca en caché ni en buscadores.
+const CABECERAS_PRIVADAS = { 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow' };
+const CABECERAS_PANEL = {
+  ...CABECERAS_PRIVADAS,
+  'X-Frame-Options': 'DENY',
+  'Content-Security-Policy': "default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; script-src 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+};
+function jsonPrivado(res, status, obj) {
+  send(res, status, JSON.stringify(obj), { 'Content-Type': 'application/json; charset=utf-8', ...CABECERAS_PRIVADAS });
+}
+
+const COOKIE_SESION = 'panel_sesion';
+const DURACION_SESION = 12 * 60 * 60 * 1000; // 12 horas
+// La firma usa una clave derivada de ADMIN_TOKEN: al cambiar ADMIN_TOKEN, todas las sesiones dejan de valer.
+const CLAVE_SESION = ADMIN_TOKEN ? crypto.createHmac('sha256', ADMIN_TOKEN).update('panel-sesion-v1').digest() : null;
+
+function firmar(texto) {
+  return crypto.createHmac('sha256', CLAVE_SESION).update(texto).digest('base64url');
+}
+function crearSesion() {
+  const contenido = `v1.${Date.now() + DURACION_SESION}.${crypto.randomBytes(12).toString('base64url')}`;
+  return `${contenido}.${firmar(contenido)}`;
+}
+function leerCookie(req, nombre) {
+  for (const parte of String(req.headers.cookie || '').split(';')) {
+    const i = parte.indexOf('=');
+    if (i > 0 && parte.slice(0, i).trim() === nombre) return parte.slice(i + 1).trim();
+  }
+  return '';
+}
+function sesionValida(req) {
+  if (!CLAVE_SESION) return false;
+  const valor = leerCookie(req, COOKIE_SESION);
+  const corte = valor.lastIndexOf('.');
+  if (corte < 0) return false;
+  const contenido = valor.slice(0, corte);
+  const firma = Buffer.from(valor.slice(corte + 1));
+  const esperada = Buffer.from(firmar(contenido));
+  if (firma.length !== esperada.length || !crypto.timingSafeEqual(firma, esperada)) return false;
+  const [version, vence] = contenido.split('.');
+  return version === 'v1' && Number(vence) > Date.now();
+}
+function esHttps(req) {
+  return String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https';
+}
+function cookieSesion(req, valor, segundos) {
+  return `${COOKIE_SESION}=${valor}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${segundos}${esHttps(req) ? '; Secure' : ''}`;
+}
+function claveCorrecta(clave) {
+  const a = Buffer.from(String(clave));
+  const b = Buffer.from(ADMIN_TOKEN);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+const ARCHIVOS_PANEL = {
+  '/panel/panel.css': ['panel.css', 'text/css; charset=utf-8'],
+  '/panel/panel.js': ['panel.js', 'text/javascript; charset=utf-8'],
+};
+async function paginaAcceso(res, status, error = '') {
+  const html = (await fsp.readFile(path.join(PANEL_DIR, 'acceso.html'), 'utf8'))
+    .replace('<!--ERROR-->', error ? `<p class="acceso-error" role="alert">${escaparHtml(error)}</p>` : '');
+  send(res, status, html, { 'Content-Type': MIME['.html'], ...CABECERAS_PANEL });
+}
+
+async function handlePanel(req, res, url) {
+  if (!ADMIN_TOKEN) return send(res, 404, 'No encontrado', { 'Content-Type': 'text/plain; charset=utf-8', ...CABECERAS_PRIVADAS });
+  const ruta = url.pathname.replace(/\/+$/, '') || '/panel';
+
+  if (ruta === '/panel' && (req.method === 'GET' || req.method === 'HEAD')) {
+    if (!sesionValida(req)) return paginaAcceso(res, 200);
+    const html = await fsp.readFile(path.join(PANEL_DIR, 'index.html'), 'utf8');
+    return send(res, 200, req.method === 'HEAD' ? null : html, { 'Content-Type': MIME['.html'], ...CABECERAS_PANEL });
+  }
+
+  if (ruta === '/panel/entrar' && req.method === 'POST') {
+    if (accesoPanelLimitado(clientIp(req))) return paginaAcceso(res, 429, 'Demasiados intentos. En unos minutos se puede intentar de nuevo.');
+    let clave = '';
+    try { clave = new URLSearchParams(await readBody(req, 2048)).get('clave') || ''; } catch { /* cuerpo inválido: clave vacía */ }
+    if (!claveCorrecta(clave)) return paginaAcceso(res, 401, 'La clave no es correcta.');
+    return send(res, 303, null, { Location: '/panel', 'Set-Cookie': cookieSesion(req, crearSesion(), DURACION_SESION / 1000), ...CABECERAS_PRIVADAS });
+  }
+
+  if (ruta === '/panel/salir' && req.method === 'POST') {
+    return send(res, 303, null, { Location: '/panel', 'Set-Cookie': cookieSesion(req, '', 0), ...CABECERAS_PRIVADAS });
+  }
+
+  const archivo = ARCHIVOS_PANEL[ruta];
+  if (archivo && (req.method === 'GET' || req.method === 'HEAD')) {
+    const contenido = await fsp.readFile(path.join(PANEL_DIR, archivo[0]));
+    return send(res, 200, req.method === 'HEAD' ? null : contenido, { 'Content-Type': archivo[1], ...CABECERAS_PRIVADAS });
+  }
+
+  return send(res, 404, 'No encontrado', { 'Content-Type': 'text/plain; charset=utf-8', ...CABECERAS_PRIVADAS });
 }
 
 // ---------- dos versiones de la invitación ----------
@@ -440,6 +561,7 @@ const server = http.createServer(async (req, res) => {
         'Cache-Control': 'no-cache',
       });
     }
+    if (url.pathname === '/panel' || url.pathname.startsWith('/panel/')) return await handlePanel(req, res, url);
     if (url.pathname.startsWith('/api/')) return await handleApi(req, res, url);
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'Método no permitido');
     const destino = redireccionVersion(url);
@@ -455,5 +577,5 @@ server.listen(PORT, () => {
   console.log(`Invitación lista en http://localhost:${PORT}`);
   console.log(`Confirmaciones en: ${DATA_FILE}`);
   if (!process.env.DATA_DIR) console.warn('Aviso: DATA_DIR no está definido. En Railway monta un Volume y define DATA_DIR=/data o los registros se pierden en cada deploy.');
-  if (!ADMIN_TOKEN) console.warn('Aviso: ADMIN_TOKEN no está definido; la descarga del CSV está deshabilitada.');
+  if (!ADMIN_TOKEN) console.warn('Aviso: ADMIN_TOKEN no está definido; el panel y la descarga del CSV están deshabilitados.');
 });

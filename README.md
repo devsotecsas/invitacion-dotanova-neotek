@@ -29,6 +29,14 @@ Las confirmaciones quedan en `data/confirmaciones.jsonl`.
 5. *Settings → Networking → Generate Domain* (o conecta un dominio propio).
 6. Healthcheck opcional: ruta `/salud`.
 
+## Panel privado de respuestas
+`https://TU-DOMINIO/panel` — se entra con la clave `ADMIN_TOKEN` (la página pública no lo enlaza).
+Cifras con desglose Actual / Potencial, respuestas por día, alergias para el restaurante, quienes quieren coordinar otro espacio y la tabla completa con búsqueda y filtros. Se actualiza solo cada 60 s y funciona en el celular.
+- La sesión dura 12 horas. Al cambiar `ADMIN_TOKEN` en Railway, todas las sesiones dejan de valer.
+- Máximo 5 intentos de acceso por IP cada 10 minutos.
+- Los ids que empiezan por `PRUEBA-` no aparecen salvo con el interruptor "Mostrar pruebas".
+- Desde el panel se descargan los dos CSV sin poner el token en la URL.
+
 ## Descargar las respuestas
 `https://TU-DOMINIO/api/confirmaciones.csv?token=TU_ADMIN_TOKEN`
 CSV separado por `;` con BOM, abre directo en Excel. Respuestas "Confirmado" y "Declinó". Si alguien responde varias veces queda la más reciente: por `id_invitado`, si no hay id por correo, y si no hay ninguno (declinaciones sin id) se conservan todas las filas.
