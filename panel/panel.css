@@ -104,6 +104,7 @@ h2 { font-size: clamp(20px, 2.6vw, 26px); margin-bottom: 14px; }
 .cifra-titulo { font-family: var(--display); text-transform: uppercase; color: var(--gris); font-size: 15px; }
 .cifra-numero { font-family: var(--display); color: var(--ambar); font-size: clamp(38px, 6vw, 52px); line-height: 1.05; margin: 4px 0; }
 .cifra-desglose { font-size: 14px; color: var(--perla); }
+.nota-spam { margin-top: 10px; color: var(--gris); font-size: 13px; }
 
 /* barras por día */
 .dias { display: grid; gap: 8px; }

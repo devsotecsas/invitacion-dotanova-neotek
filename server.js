@@ -337,6 +337,18 @@ async function handleApi(req, res, url) {
     });
   }
 
+  // TEMPORAL: muestra cómo llegan las cabeceras de IP detrás del proxy de Railway, para
+  // decidir qué valor usar en los límites por IP. Se quita en el mismo commit del arreglo.
+  if (url.pathname === '/api/diagnostico-ip' && req.method === 'GET') {
+    if (!ADMIN_TOKEN) return jsonPrivado(res, 404, { ok: false, mensaje: 'Ruta no encontrada' });
+    if (!sesionValida(req)) return jsonPrivado(res, 401, { ok: false, mensaje: 'Hace falta iniciar sesión.' });
+    return jsonPrivado(res, 200, {
+      x_forwarded_for: req.headers['x-forwarded-for'] ?? null,
+      x_real_ip: req.headers['x-real-ip'] ?? null,
+      remote_address: req.socket.remoteAddress ?? null,
+    });
+  }
+
   if (url.pathname === '/api/panel/datos' && req.method === 'GET') {
     if (!ADMIN_TOKEN) return jsonPrivado(res, 404, { ok: false, mensaje: 'Ruta no encontrada' });
     if (!sesionValida(req)) return jsonPrivado(res, 401, { ok: false, mensaje: 'Hace falta iniciar sesión.' });

@@ -10,7 +10,8 @@
   const diaClave = new Intl.DateTimeFormat('en-CA', { timeZone: ZONA, year: 'numeric', month: '2-digit', day: '2-digit' });
   const diaTexto = new Intl.DateTimeFormat('es-CO', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' });
 
-  let filas = [];
+  let filas = [];     // agrupadas, todas (la tabla "Todas las respuestas" las muestra con su marca)
+  let contables = []; // sin posible spam: son las que suman en cifras, días, alergias y coordinar
   let cargando = false;
 
   function el(tag, clase, texto) {
@@ -25,9 +26,9 @@
 
   // ---------- cifras ----------
   function cifra(titulo, filtro, valor) {
-    const total = valor(filas.filter(filtro));
-    const actual = valor(filas.filter((r) => filtro(r) && r.version === 'Actual'));
-    const potencial = valor(filas.filter((r) => filtro(r) && r.version === 'Potencial'));
+    const total = valor(contables.filter(filtro));
+    const actual = valor(contables.filter((r) => filtro(r) && r.version === 'Actual'));
+    const potencial = valor(contables.filter((r) => filtro(r) && r.version === 'Potencial'));
     const sinVersion = total - actual - potencial; // registros anteriores a las dos versiones
     const tarjeta = el('div', 'cifra');
     tarjeta.append(el('p', 'cifra-titulo', titulo), el('p', 'cifra-numero', total));
@@ -45,12 +46,17 @@
       cifra('Acompañantes', (r) => esConfirmado(r) && personas(r) === 2, contar),
       cifra('Declinaron', (r) => r.respuesta === 'Declinó', contar),
     );
+    const spam = filas.length - contables.length;
+    $('spam').hidden = spam === 0;
+    $('spam').textContent = spam === 1
+      ? '1 respuesta marcada como posible spam (no se cuenta)'
+      : `${spam} respuestas marcadas como posible spam (no se cuentan)`;
   }
 
   // ---------- respuestas por día (barras con HTML/CSS) ----------
   function pintarDias() {
     const porDia = new Map();
-    filas.forEach((r) => {
+    contables.forEach((r) => {
       if (!r.fecha) return;
       const dia = diaClave.format(new Date(r.fecha));
       const d = porDia.get(dia) || { confirmado: 0, declino: 0 };
@@ -109,7 +115,7 @@
 
   function pintarAlergias() {
     const lista = [];
-    filas.filter(esConfirmado).forEach((r) => {
+    contables.filter(esConfirmado).forEach((r) => {
       if (r.alergia) lista.push({ persona: r.nombre, empresa: r.empresa, tipo: 'Invitado', alergia: r.alergia });
       if (r.acompanante_alergia) {
         lista.push({ persona: r.acompanante_nombre, empresa: r.acompanante_cargo_empresa, tipo: `Acompañante de ${r.nombre}`, alergia: r.acompanante_alergia });
@@ -124,7 +130,7 @@
   }
 
   function pintarCoordinar() {
-    const lista = filas.filter((r) => r.respuesta === 'Declinó' && r.coordinar_otro_espacio === 'Sí')
+    const lista = contables.filter((r) => r.respuesta === 'Declinó' && r.coordinar_otro_espacio === 'Sí')
       .sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
     $('coordinar').replaceChildren(tabla([
       { titulo: 'Nombre', valor: (r) => r.nombre },
@@ -196,6 +202,7 @@
       const datos = await r.json();
       if (!r.ok || !datos.ok) throw new Error(datos.mensaje || 'error');
       filas = datos.agrupadas;
+      contables = filas.filter((r) => r.posible_spam !== 'Sí');
       pintar();
       $('aviso').hidden = true;
       $('actualizado').textContent = `Actualizado a las ${soloHora.format(new Date(datos.generado))} · ${datos.auditoria.length} filas en auditoría`;
