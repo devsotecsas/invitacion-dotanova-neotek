@@ -480,7 +480,7 @@ const VERSIONES = {
   Potencial: {
     ruta: '/DotanovaNeotek',
     imagen: '/assets/og-invitacion.jpg', // IMAGEN PENDIENTE: og-potenciales-v2.jpg
-    textoCentral: 'Dotanova y Neotek los invitan a una cena privada en Cartagena para líderes que deciden cómo se ven, se protegen y trabajan sus equipos: los mismos equipos que construyen el país. Por ellos, este año nos sumamos a una iniciativa de la Fundación CCI para apoyar a los futuros líderes de Colombia.',
+    textoCentral: 'Dotanova y Neotek los invitan a una cena privada en Cartagena para líderes que deciden cómo se ven, se protegen y trabajan sus equipos: los mismos equipos que construyen el país. Por ellos, este año nos sumamos a una iniciativa de la Fundación ACRES para apoyar a los futuros líderes de Colombia.',
     cierre: 'Nos gustaría contar con ustedes en esa mesa.',
     evento: 'Cartagena, 24 de noviembre de 2026.',
   },
